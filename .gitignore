@@ -1,0 +1,7 @@
+/__pycache__
+/convnextv2/__pycache__
+model/__pycache__
+pretrainedmodel
+savemodel
+wandb
+README.md
