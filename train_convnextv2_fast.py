@@ -12,21 +12,22 @@ from IPython.display import clear_output
 from convnextv2 import convnextv2_mfnet
 import wandb
 import math
+from new_dataset import Fast_ISPRS_dataset, ISPRS_Test_dataset
 
 from custom_repr import enable_custom_repr
 enable_custom_repr()
 
-use_wandb = True 
+use_wandb = False 
 if use_wandb:
     config = {
         "model": "convnextv2_mfnet_atto",
         "附加信息": "解码器固定256维度"
     }
     wandb.init(project="FTransUNet", config=config)
-    wandb.run.name = "convnextv2_mfnet-Vaihingen-编码器独立-atto-解码器256且LN-adamw"
+    wandb.run.name = "convnextv2_mfnet-Vaihingen-atto-编码器独立-解码器256-fast"
 
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "4"
 torch.cuda.device_count.cache_clear() 
 os.environ["WORLD_SIZE"] = "1"
 from pynvml import *
@@ -64,7 +65,8 @@ print("training : ", train_ids)
 print("testing : ", test_ids)
 print("BATCH_SIZE: ", BATCH_SIZE)
 print("Stride Size: ", Stride_Size)
-train_set = ISPRS_dataset(train_ids, cache=CACHE)
+train_set = Fast_ISPRS_dataset(train_ids, cache=CACHE)
+test_set = ISPRS_Test_dataset()
 train_loader = torch.utils.data.DataLoader(train_set, batch_size=BATCH_SIZE, drop_last=True, num_workers=8, pin_memory=True)
 
 base_lr = 0.01
@@ -91,20 +93,11 @@ def adjust_learning_rate(epoch, optimizer, warmup_epochs=5, max_lr=1e-4, min_lr=
     return lr
 
 
-def test(net, test_ids, all=False, stride=WINDOW_SIZE[0], batch_size=BATCH_SIZE, window_size=WINDOW_SIZE):
-    # Use the network on the test set
-    ## Potsdam
-    if DATASET == 'Potsdam':
-        test_images = (1 / 255 * np.asarray(io.imread(DATA_FOLDER.format(id))[:, :, :3], dtype='float32') for id in
-                       test_ids)
-        # test_images = (1 / 255 * np.asarray(io.imread(DATA_FOLDER.format(id))[:, :, (3, 0, 1, 2)][:, :, :3],
-        # dtype='float32') for id in test_ids)
-    ## Vaihingen
-    else:
-        test_images = (1 / 255 * np.asarray(io.imread(DATA_FOLDER.format(id)), dtype='float32') for id in test_ids)
-    test_dsms = (np.asarray(io.imread(DSM_FOLDER.format(id)), dtype='float32') for id in test_ids)
-    test_labels = (np.asarray(io.imread(LABEL_FOLDER.format(id)), dtype='uint8') for id in test_ids)
-    eroded_labels = (convert_from_color(io.imread(ERODED_FOLDER.format(id))) for id in test_ids)
+def test(net, test_ids, all=False, stride=WINDOW_SIZE[0], batch_size=BATCH_SIZE, window_size=WINDOW_SIZE, data_set=test_set):
+    test_images = (x.clone for x in data_set.test_images)
+    test_dsms = (x.clone for x in data_set.test_dsms)
+    test_labels = data_set.test_labels
+    eroded_labels = data_set.eroded_labels
     all_preds = []
     all_gts = []
 
@@ -119,18 +112,14 @@ def test(net, test_ids, all=False, stride=WINDOW_SIZE[0], batch_size=BATCH_SIZE,
                     tqdm(grouper(batch_size, sliding_window(img, step=stride, window_size=window_size)), total=total,
                          leave=False)):
                 # Build the tensor
-                image_patches = [np.copy(img[x:x + w, y:y + h]).transpose((2, 0, 1)) for x, y, w, h in coords]
-                image_patches = np.asarray(image_patches)
-                image_patches = Variable(torch.from_numpy(image_patches).cuda(), volatile=True)
+                image_patches = [img[x:x + w, y:y + h].permute((2, 0, 1)) for x, y, w, h in coords]
 
-                min = np.min(dsm)
-                max = np.max(dsm)
+                min = torch.min(dsm)
+                max = torch.max(dsm)
                 dsm = (dsm - min) / (max - min)
-                dsm_patches = [np.copy(dsm[x:x + w, y:y + h]) for x, y, w, h in coords]
-                dsm_patches = np.asarray(dsm_patches)
-                dsm_patches = Variable(torch.from_numpy(dsm_patches).cuda(), volatile=True)
+                dsm_patches = [dsm[x:x + w, y:y + h] for x, y, w, h in coords]
                 # Do the inference
-                outs = net(image_patches, dsm_patches)
+                outs = net(torch.stack(image_patches), torch.stack(dsm_patches))
                 outs = outs.data.cpu().numpy()
 
                 # Fill in the results array
@@ -157,7 +146,6 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
     mean_losses = np.zeros(100000000)
     weights = weights.cuda()
 
-    # criterion = nn.NLLLoss2d(weight=weights)
     iter_ = 0
     acc_best = 90.0
 
@@ -214,7 +202,9 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
 
 #####   train   ####
 time_start = time.time()
-train(net, optimizer, 50, scheduler)
+# train(net, optimizer, 50, scheduler)
+test(net, test_ids, all=False, stride=Stride_Size)
+test(net, test_ids, all=False, stride=Stride_Size)
 time_end = time.time()
 print('Total Time Cost: ', time_end - time_start)
 if use_wandb:

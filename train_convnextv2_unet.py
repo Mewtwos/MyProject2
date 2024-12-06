@@ -15,15 +15,15 @@ import wandb
 from custom_repr import enable_custom_repr
 enable_custom_repr()
 
-use_wandb = False
+use_wandb = True
 if use_wandb:
     config = {
-        "model": "convnextv2_unet_atto"
+        "model": "convnextv2_unet"
     }
     wandb.init(project="FTransUNet", config=config)
-    wandb.run.name = "convnextv2_mfnet-Vaihingen-有预训练权重-5解冻"
+    wandb.run.name = "convnextv2_unet-多模态(修复bug)-Vaihingen-atto-BN-batchsize=32-无shedule"
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "7"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 torch.cuda.device_count.cache_clear() 
 os.environ["WORLD_SIZE"] = "1"
 from pynvml import *
@@ -53,13 +53,16 @@ params = 0
 for name, param in net.named_parameters():
     params += param.nelement()
 print(params)
+if use_wandb:
+    wandb.log({"params": params})
+
 # Load the datasets
 print("training : ", train_ids)
 print("testing : ", test_ids)
 print("BATCH_SIZE: ", BATCH_SIZE)
 print("Stride Size: ", Stride_Size)
 train_set = ISPRS_dataset(train_ids, cache=CACHE)
-train_loader = torch.utils.data.DataLoader(train_set, batch_size=BATCH_SIZE)
+train_loader = torch.utils.data.DataLoader(train_set, batch_size=BATCH_SIZE, drop_last=True, num_workers=8, pin_memory=True)
 
 base_lr = 0.01
 params_dict = dict(net.named_parameters())
@@ -71,8 +74,8 @@ for key, value in params_dict.items():
     else:
         params += [{'params': [value], 'lr': base_lr}]
 
-optimizer = optim.SGD(net.parameters(), lr=base_lr, momentum=0.9, weight_decay=0.0005)
-# We define the scheduler
+# optimizer = optim.SGD(net.parameters(), lr=base_lr, momentum=0.9, weight_decay=0.0005)
+optimizer = optim.AdamW(net.parameters(), lr=1e-4, weight_decay=0.0005)
 scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [25, 35, 45], gamma=0.1)
 
 
@@ -152,10 +155,6 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
         #     print("Unfreezing the encoder part of the model")
         #     for param in net.parameters():
         #         param.requires_grad = True
-
-        if scheduler is not None:
-            scheduler.step()
-            current_lr = optimizer.param_groups[0]['lr']
         net.train()
         log_loss = 0
         for batch_idx, (data, dsm, target) in enumerate(train_loader):
@@ -183,21 +182,26 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
 
             # if e % save_epoch == 0:
             # if iter_ % 500 == 0: #原来是500
-        net.eval()
-        acc, mf1, miou = test(net, test_ids, all=False, stride=Stride_Size)
-        net.train()
-        if acc > acc_best:
-            torch.save(net.state_dict(), '/mnt/lpai-dione/ssai/cvg/workspace/nefu/lht/FTransUNet/savemodel/convnextv2_epoch{}_{}'.format(e, acc))
-            acc_best = acc
-        if use_wandb:
-            wandb.log({"epoch": e, "total_accuracy": acc, "train_loss": log_loss, "mF1": mf1, "mIoU": miou, "lr": current_lr})
-        log_loss = 0
+        if scheduler is not None:
+            # scheduler.step()
+            current_lr = optimizer.param_groups[0]['lr']
+        if e > 0:
+            net.eval()
+            acc, mf1, miou = test(net, test_ids, all=False, stride=Stride_Size)
+            net.train()
+            if acc > acc_best:
+                # torch.save(net.state_dict(), '/mnt/lpai-dione/ssai/cvg/workspace/nefu/lht/FTransUNet/savemodel/convnextv2_epoch{}_{}'.format(e, acc))
+                acc_best = acc
+
+            if use_wandb:
+                wandb.log({"epoch": e, "total_accuracy": acc, "train_loss": log_loss, "mF1": mf1, "mIoU": miou, "lr": current_lr})
+            log_loss = 0
     print('acc_best: ', acc_best)
 
 
 #####   train   ####
 time_start = time.time()
-train(net, optimizer, 1, scheduler)
+train(net, optimizer, 50, scheduler)
 time_end = time.time()
 print('Total Time Cost: ', time_end - time_start)
 if use_wandb:

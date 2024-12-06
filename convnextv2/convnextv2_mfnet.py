@@ -5,7 +5,30 @@ from torch import Tensor
 
 from .norm_layers import LayerNorm, GRN
 from .mfnet import *
+from .sa import FVit
 
+
+class InceptionDWConv2d(nn.Module):
+    """ Inception depthweise convolution
+    """
+    def __init__(self, in_channels, square_kernel_size=3, band_kernel_size=11, branch_ratio=0.125):
+        super().__init__()
+
+        gc = int(in_channels * branch_ratio)  # channel numbers of a convolution branch
+        self.dwconv_hw = nn.Conv2d(gc, gc, square_kernel_size, padding=square_kernel_size // 2, groups=gc)
+        self.dwconv_w = nn.Conv2d(gc, gc, kernel_size=(1, band_kernel_size), padding=(0, band_kernel_size // 2),
+                                  groups=gc)
+        self.dwconv_h = nn.Conv2d(gc, gc, kernel_size=(band_kernel_size, 1), padding=(band_kernel_size // 2, 0),
+                                  groups=gc)
+        self.split_indexes = (in_channels - 3 * gc, gc, gc, gc)
+
+    def forward(self, x):
+        x_id, x_hw, x_w, x_h = torch.split(x, self.split_indexes, dim=1)
+        return torch.cat(
+            (x_id, self.dwconv_hw(x_hw), self.dwconv_w(x_w), self.dwconv_h(x_h)),
+            dim=1,
+        )
+    
 
 class Block(nn.Module):
     """ConvNeXtV2 Block.
@@ -20,7 +43,9 @@ class Block(nn.Module):
         self.dwconv: nn.Module = nn.Conv2d(
             dim, dim, kernel_size=7, padding=3, groups=dim
         )  # depthwise conv
+        # self.dwconv = InceptionDWConv2d(dim)
         self.norm: nn.Module = LayerNorm(dim, eps=1e-6, data_format="channels_last")
+        # self.norm: nn.Module = nn.BatchNorm2d(dim)
 
         self.pwconv1: nn.Module = nn.Linear(
             dim, 4 * dim
@@ -37,6 +62,7 @@ class Block(nn.Module):
         x = self.dwconv(x)
         x = x.permute(0, 2, 3, 1)  # (N, C, H, W) -> (N, H, W, C)
         x = self.norm(x)
+        # x = x.permute(0, 2, 3, 1)  # (N, C, H, W) -> (N, H, W, C)
         x = self.pwconv1(x)
         x = self.act(x)
         x = self.grn(x)
@@ -48,17 +74,6 @@ class Block(nn.Module):
 
 
 class ConvNeXtV2_unet(nn.Module):
-    """ConvNeXt V2
-
-    Args:
-        in_chans (int): Number of input image channels. Default: 3
-        num_classes (int): Number of classes for classification head. Default: 1000
-        depths (tuple(int)): Number of blocks at each stage. Default: [3, 3, 9, 3]
-        dims (int): Feature dimension at each stage. Default: [96, 192, 384, 768]
-        drop_path_rate (float): Stochastic depth rate. Default: 0.
-        head_init_scale (float): Init scaling value for classifier weights and biases. Default: 1.
-    """
-
     def __init__(
         self,
         patch_size: int = 16,
@@ -67,7 +82,6 @@ class ConvNeXtV2_unet(nn.Module):
         depths: list[int] = None,
         dims: list[int] = [40, 80, 160, 320],
         drop_path_rate: float = 0.0,
-        head_init_scale: float = 1.0,
         use_orig_stem: bool = False,
     ):
         super().__init__()
@@ -100,11 +114,13 @@ class ConvNeXtV2_unet(nn.Module):
             self.initial_conv = nn.Sequential(
                 nn.Conv2d(in_chans, dims[0], kernel_size=3, stride=1, padding=1),
                 LayerNorm(dims[0], eps=1e-6, data_format="channels_first"),
+                # nn.BatchNorm2d(dims[0]),
                 nn.GELU(),
             )
             self.initial_conv2 = nn.Sequential(
                 nn.Conv2d(in_chans, dims[0], kernel_size=3, stride=1, padding=1),
                 LayerNorm(dims[0], eps=1e-6, data_format="channels_first"),
+                # nn.BatchNorm2d(dims[0]),
                 nn.GELU(),
             )
             # depthwise conv for stem
@@ -117,6 +133,7 @@ class ConvNeXtV2_unet(nn.Module):
                     groups=dims[0],
                 ),
                 LayerNorm(dims[0], eps=1e-6, data_format="channels_first"),
+                # nn.BatchNorm2d(dims[0]),
             )
             self.stem2 = nn.Sequential(
                 nn.Conv2d(
@@ -127,15 +144,22 @@ class ConvNeXtV2_unet(nn.Module):
                     groups=dims[0],
                 ),
                 LayerNorm(dims[0], eps=1e-6, data_format="channels_first"),
+                # nn.BatchNorm2d(dims[0]),
             )
 
         for i in range(3):
             downsample_layer = nn.Sequential(
                 LayerNorm(dims[i], eps=1e-6, data_format="channels_first"),
+                # nn.BatchNorm2d(dims[i]),
+                nn.Conv2d(dims[i], dims[i + 1], kernel_size=2, stride=2),
+            )
+            downsample_layer2 = nn.Sequential(
+                # LayerNorm(dims[i], eps=1e-6, data_format="channels_first"),
+                nn.BatchNorm2d(dims[i]),
                 nn.Conv2d(dims[i], dims[i + 1], kernel_size=2, stride=2),
             )
             self.downsample_layers.append(downsample_layer)
-            self.downsample_layers2.append(downsample_layer)
+            self.downsample_layers2.append(downsample_layer2)
 
         self.stages = (
             nn.ModuleList()
@@ -152,56 +176,83 @@ class ConvNeXtV2_unet(nn.Module):
                     for j in range(depths[i])
                 ]
             )
+            stage2 = nn.Sequential(
+                *[
+                    Block(dim=dims[i], drop_path=dp_rates[cur + j])
+                    for j in range(depths[i])
+                ]
+            )
             self.stages.append(stage)
-            self.stages2.append(stage)
+            self.stages2.append(stage2)
             cur += depths[i]
+
+        self.neck = nn.Sequential(
+            nn.Conv2d(
+                dims[-1],
+                256,
+                kernel_size=1,
+                bias=False,
+            ),
+            LayerNorm(256),
+            nn.Conv2d(
+                256,
+                256,
+                kernel_size=3,
+                padding=1,
+                bias=False,
+            ),
+            LayerNorm(256),
+        )
 
         self.apply(self._init_weights)
 
         #新增代码
         self.fpn1x = nn.Sequential(
-            nn.ConvTranspose2d(dims[-1], dims[-1], kernel_size=2, stride=2),
-            Norm2d(dims[-1]),
+            nn.ConvTranspose2d(256, 256, kernel_size=2, stride=2),
+            Norm2d(256),
             # LayerNorm(dims[-1]),
             nn.GELU(),
-            nn.ConvTranspose2d(dims[-1], dims[-1], kernel_size=2, stride=2),
+            nn.ConvTranspose2d(256, 256, kernel_size=2, stride=2),
         )
         self.fpn2x = nn.Sequential(
-            nn.ConvTranspose2d(dims[-1], dims[-1], kernel_size=2, stride=2),
+            nn.ConvTranspose2d(256, 256, kernel_size=2, stride=2),
         )
         self.fpn3x = nn.Identity()
         self.fpn4x = nn.MaxPool2d(kernel_size=2, stride=2)
         
         self.fpn1y = nn.Sequential(
-            nn.ConvTranspose2d(dims[-1], dims[-1], kernel_size=2, stride=2),
-            nn.BatchNorm2d(dims[-1]),
+            nn.ConvTranspose2d(256, 256, kernel_size=2, stride=2),
+            nn.BatchNorm2d(256),
             # LayerNorm(dims[-1]),
             nn.GELU(),
-            nn.ConvTranspose2d(dims[-1], dims[-1], kernel_size=2, stride=2),
+            nn.ConvTranspose2d(256, 256, kernel_size=2, stride=2),
         )
         self.fpn2y = nn.Sequential(
-            nn.ConvTranspose2d(dims[-1], dims[-1], kernel_size=2, stride=2),
+            nn.ConvTranspose2d(256, 256, kernel_size=2, stride=2),
         )
         self.fpn3y = nn.Identity()
         self.fpn4y = nn.MaxPool2d(kernel_size=2, stride=2)
-        self.fusion1 = SEFusion(dims[-1], activation=nn.GELU())
-        self.fusion2 = SEFusion(dims[-1], activation=nn.GELU())
-        self.fusion3 = SEFusion(dims[-1], activation=nn.GELU())
-        self.fusion4 = SEFusion(dims[-1], activation=nn.GELU())
+
+        self.fusion1 = SEFusion(256, activation=nn.GELU())
+        self.fusion2 = SEFusion(256, activation=nn.GELU())
+        self.fusion3 = SEFusion(256, activation=nn.GELU())
+        self.fusion4 = SEFusion(256, activation=nn.GELU())
+
         # self.encoder_sff = nn.ModuleList()
         # self.encoder_sff.append(SEFusion(dims[0]))
         # self.encoder_sff.append(SEFusion(dims[1]))
         # self.encoder_sff.append(SEFusion(dims[2]))
         # self.encoder_sff.append(SEFusion(dims[3])) 
 
-        self.decoder = Decoder(nn.BatchNorm2d, (dims[-1], dims[-1], dims[-1], dims[-1]), 64, 0.1, 8, 6)
-        # self.decoder = Decoder(LayerNorm, (dims[-1], dims[-1], dims[-1], dims[-1]), 64, 0.1, 8, 6)
+        # self.decoder = Decoder(nn.BatchNorm2d, (256, 256, 256, 256), 64, 0.1, 8, num_classes)
+        self.decoder = Decoder(LayerNorm, (256, 256, 256, 256), 64, 0.1, 8, num_classes)
         # self.decoder = Decoder((dims[-1], dims[-1], dims[-1], dims[-1]), 256, 0.1, 8, 6)
 
     def _init_weights(self, m):
         if isinstance(m, (nn.Conv2d, nn.Linear)):
             trunc_normal_(m.weight, std=0.02)
-            nn.init.constant_(m.bias, 0)
+            if m.bias is not None:
+                nn.init.constant_(m.bias, 0)
     
     def encoderx(self, x: Tensor):
         x = self.initial_conv(x)
@@ -236,7 +287,7 @@ class ConvNeXtV2_unet(nn.Module):
             y = self.stages2[i + 1](y)
             x = self.encoder_sff[i + 1](x, y)
         return x, y
-    
+
     def forward(self, x: Tensor, y: Tensor) -> Tensor:
         x = x.float()
         y = y.float()
@@ -245,6 +296,9 @@ class ConvNeXtV2_unet(nn.Module):
         x = self.encoderx(x) # [b, 320, 16, 16]
         y = self.encodery(y)
         # x, y = self.encoder(x, y)
+        
+        x = self.neck(x)
+        y = self.neck(y)
         res1x = self.fpn1x(x)
         res2x = self.fpn2x(x)
         res3x = self.fpn3x(x)
@@ -253,10 +307,12 @@ class ConvNeXtV2_unet(nn.Module):
         res2y = self.fpn2x(y)
         res3y = self.fpn3x(y)
         res4y = self.fpn4x(y)
+        # SFF融合
         res1 = self.fusion1(res1x, res1y)
         res2 = self.fusion2(res2x, res2y)
         res3 = self.fusion3(res3x, res3y)
         res4 = self.fusion4(res4x, res4y)
+
         x = self.decoder(res1, res2, res3, res4, h, w)
         return x
     

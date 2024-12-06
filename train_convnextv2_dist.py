@@ -12,10 +12,12 @@ from IPython.display import clear_output
 from convnextv2 import convnextv2_mfnet
 import wandb
 import math
+import torch.distributed as dist
 
 from custom_repr import enable_custom_repr
 enable_custom_repr()
 
+is_dist = True
 use_wandb = True 
 if use_wandb:
     config = {
@@ -24,6 +26,8 @@ if use_wandb:
     }
     wandb.init(project="FTransUNet", config=config)
     wandb.run.name = "convnextv2_mfnet-Vaihingen-编码器独立-atto-解码器256且LN-adamw"
+if is_dist:
+    dist.init_process_group(backend='nccl')
 
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "3"
@@ -65,7 +69,10 @@ print("testing : ", test_ids)
 print("BATCH_SIZE: ", BATCH_SIZE)
 print("Stride Size: ", Stride_Size)
 train_set = ISPRS_dataset(train_ids, cache=CACHE)
-train_loader = torch.utils.data.DataLoader(train_set, batch_size=BATCH_SIZE, drop_last=True, num_workers=8, pin_memory=True)
+if is_dist:
+    train_sampler = torch.utils.data.distributed.DistributedSampler(train_set)
+else:
+    train_loader = torch.utils.data.DataLoader(train_set, batch_size=BATCH_SIZE, drop_last=True, num_workers=8, pin_memory=True)
 
 base_lr = 0.01
 # optimizer = optim.SGD(net.parameters(), lr=base_lr, momentum=0.9, weight_decay=0.0005)

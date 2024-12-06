@@ -141,9 +141,6 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
     acc_best = 90.0
     log_loss = 0
     for e in range(1, epochs + 1):
-        if scheduler is not None:
-            scheduler.step()
-            current_lr = optimizer.param_groups[0]['lr']
         net.train()
         for batch_idx, (data, dsm, target) in enumerate(train_loader):
             data, dsm, target = Variable(data.cuda()), Variable(dsm.cuda()), Variable(target.cuda())
@@ -177,6 +174,9 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
         if acc > acc_best:
             torch.save(net.state_dict(), '/mnt/lpai-dione/ssai/cvg/workspace/nefu/lht/FTransUNet/savemodel/segnet256_epoch{}_{}'.format(e, acc))
             acc_best = acc
+        if scheduler is not None:
+            scheduler.step()
+            current_lr = optimizer.param_groups[0]['lr']
         if use_wandb:
             wandb.log({"epoch": e, "total_accuracy": acc, "train_loss": log_loss, "mF1": mf1, "mIoU": miou, "lr": current_lr})
         log_loss = 0

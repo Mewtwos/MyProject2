@@ -110,7 +110,7 @@ class ISPRS_dataset(torch.utils.data.Dataset):
 
     def __len__(self):
         # Default epoch size is 10 000 samples
-        # return 10000
+        return 10000
         if DATASET == 'Potsdam':
             return BATCH_SIZE * 1000
         elif DATASET == 'Vaihingen':
