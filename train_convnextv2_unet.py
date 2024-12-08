@@ -12,16 +12,18 @@ from IPython.display import clear_output
 from convnextv2 import convnextv2_unet
 import wandb
 
+
 from custom_repr import enable_custom_repr
 enable_custom_repr()
 
 use_wandb = True
 if use_wandb:
     config = {
-        "model": "convnextv2_unet"
+        "model": "convnextv2_unet",
+        "附加信息":"编码器独立，编码器特征融合，BN"
     }
     wandb.init(project="FTransUNet", config=config)
-    wandb.run.name = "convnextv2_unet-多模态(修复bug)-Vaihingen-atto-BN-batchsize=32-无shedule"
+    wandb.run.name = "convnextv2_unet-最终版-Vaihingen-large"
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 torch.cuda.device_count.cache_clear() 
@@ -35,7 +37,7 @@ seed = 3407
 torch.manual_seed(seed)
 np.random.seed(seed)
 
-net = convnextv2_unet.__dict__["convnextv2_unet_atto"](
+net = convnextv2_unet.__dict__["convnextv2_unet_large"](
             num_classes=6,
             drop_path_rate=0.1,
             head_init_scale=0.001,
@@ -43,6 +45,7 @@ net = convnextv2_unet.__dict__["convnextv2_unet_atto"](
             use_orig_stem=False,
             in_chans=3,
         )
+# print("开始加载权重")
 # net = load_custom_checkpoint(net, "/mnt/lpai-dione/ssai/cvg/workspace/nefu/lht/FTransUNet/pretrainedmodel/mmearth1m-checkpoint-199.pth")
 # print("预训练权重加载完成")
 # net.copy_all_parameters()
@@ -183,9 +186,9 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
             # if e % save_epoch == 0:
             # if iter_ % 500 == 0: #原来是500
         if scheduler is not None:
-            # scheduler.step()
+            scheduler.step()
             current_lr = optimizer.param_groups[0]['lr']
-        if e > 0:
+        if e > 30:
             net.eval()
             acc, mf1, miou = test(net, test_ids, all=False, stride=Stride_Size)
             net.train()

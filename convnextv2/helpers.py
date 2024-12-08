@@ -135,26 +135,4 @@ def load_custom_checkpoint(model, pretrained_path):
     checkpoint_model = remap_checkpoint_keys(checkpoint_model)
     load_state_dict(model, checkpoint_model, prefix="")
 
-
-    # print("---冻结编码器---")
-    # for layer, layer2 in zip(model.initial_conv, model.initial_conv2):
-    #     for param, param2 in zip(layer.parameters(), layer2.parameters()):
-    #         param.requires_grad = False
-    #         param2.requires_grad = False
-
-    # for layer, layer2 in zip(model.stem, model.stem2):
-    #     for param, param2 in zip(layer.parameters(), layer2.parameters()):
-    #         param.requires_grad = False
-    #         param2.requires_grad = False
-
-    # for layer, layer2 in zip(model.stages, model.stages2):
-    #     for param, param2 in zip(layer.parameters(), layer2.parameters()):
-    #         param.requires_grad = False
-    #         param2.requires_grad = False
-
-    # for layer, layer2 in zip(model.downsample_layers, model.downsample_layers2):
-    #     for param, param2 in zip(layer.parameters(), layer2.parameters()):
-    #         param.requires_grad = False
-    #         param2.requires_grad = False
-
     return model

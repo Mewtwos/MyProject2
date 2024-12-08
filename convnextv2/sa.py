@@ -273,13 +273,13 @@ class FVit(nn.Module):
         # self.layer.append(copy.deepcopy(Block(num_head=num_head, hidden_size=hidden_size, mode='sa')))
 
         self.layer.append(copy.deepcopy(Block(num_head=num_head, hidden_size=hidden_size, mode='mba')))
-        # self.layer.append(copy.deepcopy(Block(num_head=num_head, hidden_size=hidden_size, mode='mba')))
+        self.layer.append(copy.deepcopy(Block(num_head=num_head, hidden_size=hidden_size, mode='mba')))
         # self.layer.append(copy.deepcopy(Block(num_head=num_head, hidden_size=hidden_size, mode='mba')))
         # self.layer.append(copy.deepcopy(Block(num_head=num_head, hidden_size=hidden_size, mode='mba')))
         # self.layer.append(copy.deepcopy(Block(num_head=num_head, hidden_size=hidden_size, mode='mba')))
         # self.layer.append(copy.deepcopy(Block(num_head=num_head, hidden_size=hidden_size, mode='mba')))
 
-        # self.layer.append(copy.deepcopy(Block(num_head=num_head, hidden_size=hidden_size, mode='sa')))
+        self.layer.append(copy.deepcopy(Block(num_head=num_head, hidden_size=hidden_size, mode='sa')))
         # self.layer.append(copy.deepcopy(Block(num_head=num_head, hidden_size=hidden_size, mode='sa')))
         # self.layer.append(copy.deepcopy(Block(num_head=num_head, hidden_size=hidden_size, mode='sa')))
 
