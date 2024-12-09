@@ -51,6 +51,23 @@ class SEFusion(nn.Module):
         depth = self.se_depth(depth)
         out = rgb + depth
         return out
+    
+class SEFusion2(nn.Module):
+    def __init__(self, channels_in, channels_out, activation=nn.ReLU(inplace=True)):
+        super(SEFusion2, self).__init__()
+
+        self.se_rgb = SqueezeAndExcitation(channels_in,
+                                           activation=activation)
+        self.se_depth = SqueezeAndExcitation(channels_in,
+                                             activation=activation)
+        self.conv = nn.Conv2d(channels_in, channels_out, kernel_size=1, bias=False)
+
+    def forward(self, rgb, depth):
+        rgb = self.se_rgb(rgb)
+        depth = self.se_depth(depth)
+        out = rgb + depth
+        out = self.conv(out)
+        return out
 
 
 class ConvBN(nn.Sequential):
@@ -223,52 +240,6 @@ class Mlp(nn.Module):
         x = self.fc2(x)
         x = self.drop(x)
         return x
-    
-# class Mlp(nn.Module):
-#     def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.):
-#         super().__init__()
-#         out_features = out_features or in_features
-#         hidden_features = hidden_features or in_features
-#         self.fc1 = KANLinear(
-#                         in_features,
-#                         hidden_features,
-#                         grid_size=5,
-#                         spline_order=3,
-#                         scale_noise=0.1,
-#                         scale_base=1.0,
-#                         scale_spline=1.0,
-#                         base_activation=torch.nn.SiLU,
-#                         grid_eps=0.02,
-#                         grid_range=[-1, 1],
-#                     )
-#         self.act = act_layer()
-#         self.fc2 = KANLinear(
-#                         hidden_features,
-#                         out_features,
-#                         grid_size=5,
-#                         spline_order=3,
-#                         scale_noise=0.1,
-#                         scale_base=1.0,
-#                         scale_spline=1.0,
-#                         base_activation=torch.nn.SiLU,
-#                         grid_eps=0.02,
-#                         grid_range=[-1, 1],
-#                     )
-#         self.drop = nn.Dropout(drop, inplace=True)
-
-#     def forward(self, x):
-#         h, w = x.size(2), x.size(3)
-#         x = x.view(x.size(0), x.size(1), -1).permute(0, 2, 1).contiguous()
-#         b, n = x.size(0), x.size(1)
-#         x = x.view(b*n, -1)
-#         x = self.fc1(x)
-#         x = self.act(x)
-#         x = self.drop(x)
-#         x = self.fc2(x)
-#         x = self.drop(x)
-#         x = x.view(b, n, -1)
-#         x = x.permute(0, 2, 1).view(x.size(0), x.size(2), h, w).contiguous()
-#         return x
 
 
 class Block(nn.Module):

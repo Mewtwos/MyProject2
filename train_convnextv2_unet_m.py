@@ -9,7 +9,7 @@ from convnextv2.helpers import load_custom_checkpoint
 from utils import *
 from torch.autograd import Variable
 from IPython.display import clear_output
-from convnextv2 import convnextv2_unet
+from convnextv2 import convnextv2_unet_modify
 import wandb
 
 
@@ -23,7 +23,7 @@ if use_wandb:
         "附加信息":"编码器独立，编码器特征融合，BN"
     }
     wandb.init(project="FTransUNet", config=config)
-    wandb.run.name = "convnextv2_unet-最终版-Vaihingen-tiny-inception"
+    wandb.run.name = "convnextv2_unet-最终版-Vaihingen-atto"
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 torch.cuda.device_count.cache_clear() 
@@ -37,13 +37,14 @@ seed = 3407
 torch.manual_seed(seed)
 np.random.seed(seed)
 
-net = convnextv2_unet.__dict__["convnextv2_unet_tiny"](
+net = convnextv2_unet_modify.__dict__["convnextv2_unet_atto"](
             num_classes=6,
             drop_path_rate=0.1,
             head_init_scale=0.001,
             patch_size=16,
             use_orig_stem=False,
             in_chans=3,
+            decoder_dim=256,
         )
 # print("开始加载权重")
 # net = load_custom_checkpoint(net, "/mnt/lpai-dione/ssai/cvg/workspace/nefu/lht/FTransUNet/pretrainedmodel/mmearth1m-checkpoint-199.pth")

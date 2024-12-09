@@ -4,7 +4,7 @@ import torch.nn as nn
 from timm.models.layers import trunc_normal_, DropPath
 from torch import Tensor
 from .norm_layers import LayerNorm, GRN
-from .mfnet import SEFusion
+from .mfnet import SEFusion, SEFusion2
 from .sa import FVit
 from .kan import KANLinear
 
@@ -40,10 +40,10 @@ class Block(nn.Module):
 
     def __init__(self, dim: int, drop_path=0.0):
         super().__init__()
-        # self.dwconv: nn.Module = nn.Conv2d(
-        #     dim, dim, kernel_size=7, padding=3, groups=dim
-        # ) 
-        self.dwconv: nn.Module = InceptionDWConv2d(dim)
+        self.dwconv: nn.Module = nn.Conv2d(
+            dim, dim, kernel_size=7, padding=3, groups=dim
+        ) 
+        # self.dwconv: nn.Module = InceptionDWConv2d(dim)
         # self.norm: nn.Module = LayerNorm(dim, eps=1e-6, data_format="channels_last")
         self.norm: nn.Module = nn.BatchNorm2d(dim, eps=1e-6)
 
@@ -87,7 +87,7 @@ class UpsampleBlock(nn.Module):
         return x
 
 
-class ConvNeXtV2_unet(nn.Module):
+class ConvNeXtV2_unet_modify(nn.Module):
     """ConvNeXt V2
 
     Args:
@@ -110,6 +110,7 @@ class ConvNeXtV2_unet(nn.Module):
         drop_path_rate: float = 0.0,
         head_init_scale: float = 1.0,
         use_orig_stem: bool = False,
+        decoder_dim: int = 256,
     ):
         super().__init__()
         self.depths = depths
@@ -215,20 +216,20 @@ class ConvNeXtV2_unet(nn.Module):
 
         # self.norm = nn.LayerNorm(dims[-1], eps=1e-6)  # final norm layer
         self.norm = nn.BatchNorm2d(dims[-1], eps=1e-6)
-        self.head = nn.Conv2d(int(dims[0] / 2), num_classes, kernel_size=1, stride=1)
+        self.head = nn.Conv2d(int(decoder_dim / 4), num_classes, kernel_size=1, stride=1)
 
         self.upsample_layers = nn.ModuleList()
 
         for i in reversed(range(self.num_stage)):
             if i == 3:
                 self.upsample_layers.append(
-                    UpsampleBlock(dims[i], int(dims[i] / 2), scale_factor=2)
+                    UpsampleBlock(dims[-1], decoder_dim, scale_factor=2)
                 )
             elif i == 0:
                 self.upsample_layers.append(
                     UpsampleBlock(
-                        dims[i] * 2,
-                        int(dims[i]),
+                        decoder_dim,
+                        decoder_dim,
                         scale_factor=patch_size // (2 ** (self.num_stage - 1)),
                     )
                 )
@@ -250,8 +251,8 @@ class ConvNeXtV2_unet(nn.Module):
                 else:
                     self.initial_conv_upsample = nn.Sequential(
                         nn.Conv2d(
-                            dims[i] * 2,
-                            int(dims[i] / 2),
+                            decoder_dim,
+                            int(decoder_dim / 4),
                             kernel_size=3,
                             stride=1,
                             padding=1,
@@ -259,22 +260,91 @@ class ConvNeXtV2_unet(nn.Module):
                         # LayerNorm(
                         #     int(dims[i] / 2), eps=1e-6, data_format="channels_first"
                         # ),
-                        nn.BatchNorm2d(int(dims[i] / 2), eps=1e-6),
+                        nn.BatchNorm2d(int(decoder_dim / 4), eps=1e-6),
                         nn.GELU(),
                     )
             else:
                 self.upsample_layers.append(
-                    UpsampleBlock(dims[i] * 2, int(dims[i] / 2), scale_factor=2)
+                    UpsampleBlock(decoder_dim, decoder_dim, scale_factor=2)
                 )
 
         #新增代码
-        # self.fvit = FVit(num_head=8, hidden_size=320)
-        # self.projx = nn.Conv2d(
-        #     in_channels=dims[-1], out_channels=256, kernel_size=1
-        # )
-        # self.projy = nn.Conv2d(
-        #     in_channels=dims[-1], out_channels=256, kernel_size=1
-        # )
+        #hd4
+        self.h1_to_hd4 = nn.Sequential(nn.MaxPool2d(8, 8, ceil_mode=True),
+                                       nn.Conv2d(dims[0], decoder_dim, kernel_size=3, padding=1),
+                                       nn.BatchNorm2d(decoder_dim),
+                                       nn.GELU())
+        self.h2_to_hd4 = nn.Sequential(nn.MaxPool2d(4, 4, ceil_mode=True),
+                                       nn.Conv2d(dims[0], decoder_dim, kernel_size=3, padding=1),
+                                       nn.BatchNorm2d(decoder_dim),
+                                       nn.GELU())
+        self.h3_to_hd4 = nn.Sequential(nn.MaxPool2d(2, 2, ceil_mode=True),
+                                        nn.Conv2d(dims[1], decoder_dim, kernel_size=3, padding=1),
+                                        nn.BatchNorm2d(decoder_dim),
+                                        nn.GELU())
+        self.h4_to_hd4 = nn.Sequential(nn.Conv2d(dims[2], decoder_dim, kernel_size=3, padding=1),
+                                        nn.BatchNorm2d(decoder_dim),
+                                        nn.GELU())
+        self.fusion_hd4 = nn.Sequential(nn.Conv2d(decoder_dim * 5, decoder_dim, kernel_size=3, padding=1),
+                                        nn.BatchNorm2d(decoder_dim),
+                                        nn.GELU())
+        #hd3
+        self.h1_to_hd3 = nn.Sequential(nn.MaxPool2d(4, 4, ceil_mode=True),
+                                        nn.Conv2d(dims[0], decoder_dim, kernel_size=3, padding=1),
+                                        nn.BatchNorm2d(decoder_dim),
+                                        nn.GELU())
+        self.h2_to_hd3 = nn.Sequential(nn.MaxPool2d(2, 2, ceil_mode=True),
+                                        nn.Conv2d(dims[0], decoder_dim, kernel_size=3, padding=1),
+                                        nn.BatchNorm2d(decoder_dim),
+                                        nn.GELU())
+        self.h3_to_hd3 = nn.Sequential(nn.Conv2d(dims[1], decoder_dim, kernel_size=3, padding=1),
+                                        nn.BatchNorm2d(decoder_dim),
+                                        nn.GELU())
+        self.h5_up_hd3 = nn.Sequential(nn.Upsample(scale_factor=4, mode='nearest'),
+                                        nn.Conv2d(dims[3], decoder_dim, kernel_size=3, padding=1),
+                                        nn.BatchNorm2d(decoder_dim),
+                                        nn.GELU())
+        self.fusion_hd3 = nn.Sequential(nn.Conv2d(decoder_dim * 5, decoder_dim, kernel_size=3, padding=1),
+                                        nn.BatchNorm2d(decoder_dim),
+                                        nn.GELU())
+        #hd2
+        self.h1_to_hd2 = nn.Sequential(nn.MaxPool2d(2, 2, ceil_mode=True),
+                                        nn.Conv2d(dims[0], decoder_dim, kernel_size=3, padding=1),
+                                        nn.BatchNorm2d(decoder_dim),
+                                        nn.GELU())
+        self.h2_to_hd2 = nn.Sequential(nn.Conv2d(dims[0], decoder_dim, kernel_size=3, padding=1),
+                                        nn.BatchNorm2d(decoder_dim),
+                                        nn.GELU())
+        self.hd4_up_hd2 = nn.Sequential(nn.Upsample(scale_factor=4, mode='nearest'),
+                                        nn.Conv2d(decoder_dim, decoder_dim, kernel_size=3, padding=1),
+                                        nn.BatchNorm2d(decoder_dim),
+                                        nn.GELU())
+        self.h5_up_hd2 = nn.Sequential(nn.Upsample(scale_factor=8, mode='nearest'),
+                                        nn.Conv2d(dims[3], decoder_dim, kernel_size=3, padding=1),
+                                        nn.BatchNorm2d(decoder_dim),
+                                        nn.GELU())
+        self.fusion_hd2 = nn.Sequential(nn.Conv2d(decoder_dim * 5, decoder_dim, kernel_size=3, padding=1),
+                                        nn.BatchNorm2d(decoder_dim),
+                                        nn.GELU())
+        #hd1
+        self.h1_to_hd1 = nn.Sequential(nn.Conv2d(dims[0], decoder_dim, kernel_size=3, padding=1),
+                                        nn.BatchNorm2d(decoder_dim),
+                                        nn.GELU())
+        self.hd4_up_hd1 = nn.Sequential(nn.Upsample(scale_factor=8, mode='nearest'),
+                                        nn.Conv2d(decoder_dim, decoder_dim, kernel_size=3, padding=1),
+                                        nn.BatchNorm2d(decoder_dim),
+                                        nn.GELU())
+        self.hd3_up_hd1 = nn.Sequential(nn.Upsample(scale_factor=4, mode='nearest'),
+                                        nn.Conv2d(decoder_dim, decoder_dim, kernel_size=3, padding=1),
+                                        nn.BatchNorm2d(decoder_dim),
+                                        nn.GELU())
+        self.h5_up_hd1 = nn.Sequential(nn.Upsample(scale_factor=16, mode='nearest'),
+                                        nn.Conv2d(dims[3], decoder_dim, kernel_size=3, padding=1),
+                                        nn.BatchNorm2d(decoder_dim),
+                                        nn.GELU())
+        self.fusion_hd1 = nn.Sequential(nn.Conv2d(decoder_dim * 5, decoder_dim, kernel_size=3, padding=1),
+                                        nn.BatchNorm2d(decoder_dim),
+                                        nn.GELU())
 
         self.apply(self._init_weights)
         self.head.weight.data.mul_(head_init_scale)
@@ -282,11 +352,17 @@ class ConvNeXtV2_unet(nn.Module):
 
         #新增代码
         self.sff1 = SEFusion(dims[0])
+        self.sff1conv = nn.Conv2d(dims[0], decoder_dim, kernel_size=1, bias=False)
         self.sff2 = SEFusion(dims[0])
+        self.sff2conv = nn.Conv2d(dims[0], decoder_dim, kernel_size=1, bias=False)
         self.sff_stage = nn.ModuleList()
+        self.sffconv_stage = nn.ModuleList()
         self.sff_stage.append(SEFusion(dims[1]))
+        self.sffconv_stage.append(nn.Conv2d(dims[1], decoder_dim, kernel_size=1, bias=False))
         self.sff_stage.append(SEFusion(dims[2]))
+        self.sffconv_stage.append(nn.Conv2d(dims[2], decoder_dim, kernel_size=1, bias=False))
         self.sff_final = SEFusion(dims[3])
+        
         
 
 
@@ -296,11 +372,11 @@ class ConvNeXtV2_unet(nn.Module):
         x = self.initial_conv(x)
         y = self.initial_conv2(y)
         x = self.sff1(x, y)
-        enc_features.append(x)
+        enc_features.append(self.sff1conv(x))
         x = self.stem(x)
         y = self.stem2(y)
         x = self.sff2(x, y)
-        enc_features.append(x)
+        enc_features.append(self.sff2conv(x))
 
         x = self.stages[0](x)
         y = self.stages2[0](y)
@@ -312,16 +388,9 @@ class ConvNeXtV2_unet(nn.Module):
             y = self.stages2[i + 1](y)
             if i < 2:
                 x = self.sff_stage[i](x, y)
-                enc_features.append(x)
+                enc_features.append(self.sffconv_stage[i](x))
         
         x = self.sff_final(x, y)
-
-        # h, w = x.shape[2], x.shape[3]
-        # x = x.view(x.shape[0], x.shape[1], -1).permute(0, 2, 1)
-        # y = y.view(y.shape[0], y.shape[1], -1).permute(0, 2, 1)
-        # x, y = self.fvit(x, y)
-        # x = x + y
-        # x = x.permute(0, 2, 1).view(x.shape[0], x.shape[2], h, w)
 
         return x, enc_features
 
@@ -349,8 +418,65 @@ class ConvNeXtV2_unet(nn.Module):
         x = x.float()
         y = y.float()
         y = y.unsqueeze(1).repeat(1, 3, 1, 1)
-        x, enc_features = self.encoder(x, y)
-        x = self.decoder(x, enc_features)
+        x = self.initial_conv(x)
+        y = self.initial_conv2(y)
+        x = self.sff1(x, y)
+        h1 = x #dim[0] 256
+        x = self.stem(x)
+        y = self.stem2(y)
+        x = self.stages[0](x)
+        y = self.stages[0](y)
+        x = self.sff2(x, y)
+        h2 = x #dim[0] 128
+        x = self.downsample_layers[0](x)
+        y = self.downsample_layers2[0](y)
+        x = self.stages[1](x)
+        y = self.stages2[1](y)
+        x = self.sff_stage[0](x, y)
+        h3 = x #dim[1] 64
+        x = self.downsample_layers[1](x)
+        y = self.downsample_layers2[1](y)
+        x = self.stages[2](x)
+        y = self.stages2[2](y)
+        x = self.sff_stage[1](x, y)
+        h4 = x #dim[2] 32
+        x = self.downsample_layers[2](x)
+        y = self.downsample_layers2[2](y)
+        x = self.stages[3](x)
+        y = self.stages2[3](y)
+        h5 = self.sff_final(x, y) #dim[3] 16
+
+        #decoder
+        #hd4
+        hd4 = self.upsample_layers[0](h5)
+        h1_to_hd4 = self.h1_to_hd4(h1)
+        h2_to_hd4 = self.h2_to_hd4(h2)
+        h3_to_hd4 = self.h3_to_hd4(h3)
+        h4_to_hd4 = self.h4_to_hd4(h4)
+        hd4 = self.fusion_hd4(torch.cat([hd4, h1_to_hd4, h2_to_hd4, h3_to_hd4, h4_to_hd4], dim=1))
+        #hd3
+        hd3 = self.upsample_layers[1](hd4)
+        h1_to_hd3 = self.h1_to_hd3(h1)
+        h2_to_hd3 = self.h2_to_hd3(h2)
+        h3_to_hd3 = self.h3_to_hd3(h3)
+        h5_up_hd3 = self.h5_up_hd3(h5)
+        hd3 = self.fusion_hd3(torch.cat([hd3, h1_to_hd3, h2_to_hd3, h3_to_hd3, h5_up_hd3], dim=1))
+        #hd2
+        hd2 = self.upsample_layers[2](hd3)
+        h1_to_hd2 = self.h1_to_hd2(h1)
+        h2_to_hd2 = self.h2_to_hd2(h2)
+        hd4_up_hd2 = self.hd4_up_hd2(hd4)
+        h5_up_hd2 = self.h5_up_hd2(h5)
+        hd2 = self.fusion_hd2(torch.cat([hd2, h1_to_hd2, h2_to_hd2, hd4_up_hd2, h5_up_hd2], dim=1))
+        #hd1
+        hd1 = self.upsample_layers[3](hd2)
+        h1_to_hd1 = self.h1_to_hd1(h1)
+        hd4_up_hd1 = self.hd4_up_hd1(hd4)
+        hd3_up_hd1 = self.hd3_up_hd1(hd3)
+        h5_up_hd1 = self.h5_up_hd1(h5)
+        hd1 = self.fusion_hd1(torch.cat([hd1, h1_to_hd1, hd4_up_hd1, hd3_up_hd1, h5_up_hd1], dim=1))
+
+        x = self.initial_conv_upsample(hd1)
         x = self.head(x)
 
         return x
@@ -371,40 +497,40 @@ class ConvNeXtV2_unet(nn.Module):
     
 
 def convnextv2_unet_atto(**kwargs):
-    model = ConvNeXtV2_unet(depths=[2, 2, 6, 2], dims=[40, 80, 160, 320], **kwargs)
+    model = ConvNeXtV2_unet_modify(depths=[2, 2, 6, 2], dims=[40, 80, 160, 320], **kwargs)
     return model
 
 
 def convnextv2_unet_femto(**kwargs):
-    model = ConvNeXtV2_unet(depths=[2, 2, 6, 2], dims=[48, 96, 192, 384], **kwargs)
+    model = ConvNeXtV2_unet_modify(depths=[2, 2, 6, 2], dims=[48, 96, 192, 384], **kwargs)
     return model
 
 
 def convnextv2_unet_pico(**kwargs):
-    model = ConvNeXtV2_unet(depths=[2, 2, 6, 2], dims=[64, 128, 256, 512], **kwargs)
+    model = ConvNeXtV2_unet_modify(depths=[2, 2, 6, 2], dims=[64, 128, 256, 512], **kwargs)
     return model
 
 
 def convnextv2_unet_nano(**kwargs):
-    model = ConvNeXtV2_unet(depths=[2, 2, 8, 2], dims=[80, 160, 320, 640], **kwargs)
+    model = ConvNeXtV2_unet_modify(depths=[2, 2, 8, 2], dims=[80, 160, 320, 640], **kwargs)
     return model
 
 
 def convnextv2_unet_tiny(**kwargs):
-    model = ConvNeXtV2_unet(depths=[3, 3, 9, 3], dims=[96, 192, 384, 768], **kwargs)
+    model = ConvNeXtV2_unet_modify(depths=[3, 3, 9, 3], dims=[96, 192, 384, 768], **kwargs)
     return model
 
 
 def convnextv2_unet_base(**kwargs):
-    model = ConvNeXtV2_unet(depths=[3, 3, 27, 3], dims=[128, 256, 512, 1024], **kwargs)
+    model = ConvNeXtV2_unet_modify(depths=[3, 3, 27, 3], dims=[128, 256, 512, 1024], **kwargs)
     return model
 
 
 def convnextv2_unet_large(**kwargs):
-    model = ConvNeXtV2_unet(depths=[3, 3, 27, 3], dims=[192, 384, 768, 1536], **kwargs)
+    model = ConvNeXtV2_unet_modify(depths=[3, 3, 27, 3], dims=[192, 384, 768, 1536], **kwargs)
     return model
 
 
 def convnextv2_unet_huge(**kwargs):
-    model = ConvNeXtV2_unet(depths=[3, 3, 27, 3], dims=[352, 704, 1408, 2816], **kwargs)
+    model = ConvNeXtV2_unet_modify(depths=[3, 3, 27, 3], dims=[352, 704, 1408, 2816], **kwargs)
     return model
