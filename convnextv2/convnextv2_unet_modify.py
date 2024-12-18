@@ -7,28 +7,9 @@ from .norm_layers import LayerNorm, GRN
 from .mfnet import SEFusion, SEFusion2
 from .sa import FVit
 from .kan import KANLinear
+from .ftrans_decoder import DecoderBlock
 
 
-class InceptionDWConv2d(nn.Module):
-    """ Inception depthweise convolution
-    """
-    def __init__(self, in_channels, square_kernel_size=3, band_kernel_size=11, branch_ratio=0.125):##原来是0.125
-        super().__init__()
-
-        gc = int(in_channels * branch_ratio)  # channel numbers of a convolution branch
-        self.dwconv_hw = nn.Conv2d(gc, gc, square_kernel_size, padding=square_kernel_size // 2, groups=gc)
-        self.dwconv_w = nn.Conv2d(gc, gc, kernel_size=(1, band_kernel_size), padding=(0, band_kernel_size // 2),
-                                  groups=gc)
-        self.dwconv_h = nn.Conv2d(gc, gc, kernel_size=(band_kernel_size, 1), padding=(band_kernel_size // 2, 0),
-                                  groups=gc)
-        self.split_indexes = (in_channels - 3 * gc, gc, gc, gc)
-
-    def forward(self, x):
-        x_id, x_hw, x_w, x_h = torch.split(x, self.split_indexes, dim=1)
-        return torch.cat(
-            (x_id, self.dwconv_hw(x_hw), self.dwconv_w(x_w), self.dwconv_h(x_h)),
-            dim=1,
-        )
 
 class Block(nn.Module):
     """ConvNeXtV2 Block.
@@ -43,7 +24,6 @@ class Block(nn.Module):
         self.dwconv: nn.Module = nn.Conv2d(
             dim, dim, kernel_size=7, padding=3, groups=dim
         ) 
-        # self.dwconv: nn.Module = InceptionDWConv2d(dim)
         # self.norm: nn.Module = LayerNorm(dim, eps=1e-6, data_format="channels_last")
         self.norm: nn.Module = nn.BatchNorm2d(dim, eps=1e-6)
 
@@ -216,155 +196,79 @@ class ConvNeXtV2_unet_modify(nn.Module):
 
         # self.norm = nn.LayerNorm(dims[-1], eps=1e-6)  # final norm layer
         self.norm = nn.BatchNorm2d(dims[-1], eps=1e-6)
-        self.head = nn.Conv2d(int(decoder_dim / 4), num_classes, kernel_size=1, stride=1)
+        # self.head = nn.Conv2d(int(decoder_dim / 4), num_classes, kernel_size=1, stride=1)
 
-        self.upsample_layers = nn.ModuleList()
+        # self.upsample_layers = nn.ModuleList()
 
-        for i in reversed(range(self.num_stage)):
-            if i == 3:
-                self.upsample_layers.append(
-                    UpsampleBlock(dims[-1], decoder_dim, scale_factor=2)
-                )
-            elif i == 0:
-                self.upsample_layers.append(
-                    UpsampleBlock(
-                        decoder_dim,
-                        decoder_dim,
-                        scale_factor=patch_size // (2 ** (self.num_stage - 1)),
-                    )
-                )
+        # for i in reversed(range(self.num_stage)):
+        #     if i == 3:
+        #         self.upsample_layers.append(
+        #             UpsampleBlock(dims[-1], decoder_dim, scale_factor=2)
+        #         )
+        #     elif i == 0:
+        #         self.upsample_layers.append(
+        #             UpsampleBlock(
+        #                 decoder_dim,
+        #                 decoder_dim,
+        #                 scale_factor=patch_size // (2 ** (self.num_stage - 1)),
+        #             )
+        #         )
 
-                if self.use_orig_stem:
-                    self.initial_conv_upsample = nn.Sequential(
-                        nn.Conv2d(
-                            dims[i],
-                            int(dims[i] / 2),
-                            kernel_size=3,
-                            stride=1,
-                            padding=1,
-                        ),
-                        LayerNorm(
-                            int(dims[i] / 2), eps=1e-6, data_format="channels_first"
-                        ),
-                        nn.GELU(),
-                    )
-                else:
-                    self.initial_conv_upsample = nn.Sequential(
-                        nn.Conv2d(
-                            decoder_dim,
-                            int(decoder_dim / 4),
-                            kernel_size=3,
-                            stride=1,
-                            padding=1,
-                        ),
-                        # LayerNorm(
-                        #     int(dims[i] / 2), eps=1e-6, data_format="channels_first"
-                        # ),
-                        nn.BatchNorm2d(int(decoder_dim / 4), eps=1e-6),
-                        nn.GELU(),
-                    )
-            else:
-                self.upsample_layers.append(
-                    UpsampleBlock(decoder_dim, decoder_dim, scale_factor=2)
-                )
+        #         if self.use_orig_stem:
+        #             self.initial_conv_upsample = nn.Sequential(
+        #                 nn.Conv2d(
+        #                     dims[i],
+        #                     int(dims[i] / 2),
+        #                     kernel_size=3,
+        #                     stride=1,
+        #                     padding=1,
+        #                 ),
+        #                 LayerNorm(
+        #                     int(dims[i] / 2), eps=1e-6, data_format="channels_first"
+        #                 ),
+        #                 nn.GELU(),
+        #             )
+        #         else:
+        #             self.initial_conv_upsample = nn.Sequential(
+        #                 nn.Conv2d(
+        #                     decoder_dim,
+        #                     int(decoder_dim / 4),
+        #                     kernel_size=3,
+        #                     stride=1,
+        #                     padding=1,
+        #                 ),
+        #                 # LayerNorm(
+        #                 #     int(dims[i] / 2), eps=1e-6, data_format="channels_first"
+        #                 # ),
+        #                 nn.BatchNorm2d(int(decoder_dim / 4), eps=1e-6),
+        #                 nn.GELU(),
+        #             )
+        #     else:
+        #         self.upsample_layers.append(
+        #             UpsampleBlock(decoder_dim, decoder_dim, scale_factor=2)
+        #         )
 
         #新增代码
-        #hd4
-        self.h1_to_hd4 = nn.Sequential(nn.MaxPool2d(8, 8, ceil_mode=True),
-                                       nn.Conv2d(dims[0], decoder_dim, kernel_size=3, padding=1),
-                                       nn.BatchNorm2d(decoder_dim),
-                                       nn.GELU())
-        self.h2_to_hd4 = nn.Sequential(nn.MaxPool2d(4, 4, ceil_mode=True),
-                                       nn.Conv2d(dims[0], decoder_dim, kernel_size=3, padding=1),
-                                       nn.BatchNorm2d(decoder_dim),
-                                       nn.GELU())
-        self.h3_to_hd4 = nn.Sequential(nn.MaxPool2d(2, 2, ceil_mode=True),
-                                        nn.Conv2d(dims[1], decoder_dim, kernel_size=3, padding=1),
-                                        nn.BatchNorm2d(decoder_dim),
-                                        nn.GELU())
-        self.h4_to_hd4 = nn.Sequential(nn.Conv2d(dims[2], decoder_dim, kernel_size=3, padding=1),
-                                        nn.BatchNorm2d(decoder_dim),
-                                        nn.GELU())
-        self.fusion_hd4 = nn.Sequential(nn.Conv2d(decoder_dim * 5, decoder_dim, kernel_size=3, padding=1),
-                                        nn.BatchNorm2d(decoder_dim),
-                                        nn.GELU())
-        #hd3
-        self.h1_to_hd3 = nn.Sequential(nn.MaxPool2d(4, 4, ceil_mode=True),
-                                        nn.Conv2d(dims[0], decoder_dim, kernel_size=3, padding=1),
-                                        nn.BatchNorm2d(decoder_dim),
-                                        nn.GELU())
-        self.h2_to_hd3 = nn.Sequential(nn.MaxPool2d(2, 2, ceil_mode=True),
-                                        nn.Conv2d(dims[0], decoder_dim, kernel_size=3, padding=1),
-                                        nn.BatchNorm2d(decoder_dim),
-                                        nn.GELU())
-        self.h3_to_hd3 = nn.Sequential(nn.Conv2d(dims[1], decoder_dim, kernel_size=3, padding=1),
-                                        nn.BatchNorm2d(decoder_dim),
-                                        nn.GELU())
-        self.h5_up_hd3 = nn.Sequential(nn.Upsample(scale_factor=4, mode='nearest'),
-                                        nn.Conv2d(dims[3], decoder_dim, kernel_size=3, padding=1),
-                                        nn.BatchNorm2d(decoder_dim),
-                                        nn.GELU())
-        self.fusion_hd3 = nn.Sequential(nn.Conv2d(decoder_dim * 5, decoder_dim, kernel_size=3, padding=1),
-                                        nn.BatchNorm2d(decoder_dim),
-                                        nn.GELU())
-        #hd2
-        self.h1_to_hd2 = nn.Sequential(nn.MaxPool2d(2, 2, ceil_mode=True),
-                                        nn.Conv2d(dims[0], decoder_dim, kernel_size=3, padding=1),
-                                        nn.BatchNorm2d(decoder_dim),
-                                        nn.GELU())
-        self.h2_to_hd2 = nn.Sequential(nn.Conv2d(dims[0], decoder_dim, kernel_size=3, padding=1),
-                                        nn.BatchNorm2d(decoder_dim),
-                                        nn.GELU())
-        self.hd4_up_hd2 = nn.Sequential(nn.Upsample(scale_factor=4, mode='nearest'),
-                                        nn.Conv2d(decoder_dim, decoder_dim, kernel_size=3, padding=1),
-                                        nn.BatchNorm2d(decoder_dim),
-                                        nn.GELU())
-        self.h5_up_hd2 = nn.Sequential(nn.Upsample(scale_factor=8, mode='nearest'),
-                                        nn.Conv2d(dims[3], decoder_dim, kernel_size=3, padding=1),
-                                        nn.BatchNorm2d(decoder_dim),
-                                        nn.GELU())
-        self.fusion_hd2 = nn.Sequential(nn.Conv2d(decoder_dim * 5, decoder_dim, kernel_size=3, padding=1),
-                                        nn.BatchNorm2d(decoder_dim),
-                                        nn.GELU())
-        #hd1
-        self.h1_to_hd1 = nn.Sequential(nn.Conv2d(dims[0], decoder_dim, kernel_size=3, padding=1),
-                                        nn.BatchNorm2d(decoder_dim),
-                                        nn.GELU())
-        self.hd4_up_hd1 = nn.Sequential(nn.Upsample(scale_factor=8, mode='nearest'),
-                                        nn.Conv2d(decoder_dim, decoder_dim, kernel_size=3, padding=1),
-                                        nn.BatchNorm2d(decoder_dim),
-                                        nn.GELU())
-        self.hd3_up_hd1 = nn.Sequential(nn.Upsample(scale_factor=4, mode='nearest'),
-                                        nn.Conv2d(decoder_dim, decoder_dim, kernel_size=3, padding=1),
-                                        nn.BatchNorm2d(decoder_dim),
-                                        nn.GELU())
-        self.h5_up_hd1 = nn.Sequential(nn.Upsample(scale_factor=16, mode='nearest'),
-                                        nn.Conv2d(dims[3], decoder_dim, kernel_size=3, padding=1),
-                                        nn.BatchNorm2d(decoder_dim),
-                                        nn.GELU())
-        self.fusion_hd1 = nn.Sequential(nn.Conv2d(decoder_dim * 5, decoder_dim, kernel_size=3, padding=1),
-                                        nn.BatchNorm2d(decoder_dim),
-                                        nn.GELU())
+
+        self.decoder1 = DecoderBlock(dims[2], dims[1], dims[2])
+        self.decoder2 = DecoderBlock(dims[1], dims[0], dims[1])
+        self.decoder3 = DecoderBlock(dims[0], dims[0], dims[0])
+        self.decoder4 = DecoderBlock(dims[0], dims[0], dims[0])
+        self.project = nn.Conv2d(dims[-1], dims[-2], kernel_size=1, bias=False)
+        self.segmentation_head = nn.Conv2d(dims[0], num_classes, kernel_size=3, padding=3 // 2)
 
         self.apply(self._init_weights)
-        self.head.weight.data.mul_(head_init_scale)
-        self.head.bias.data.mul_(head_init_scale)
+        # self.head.weight.data.mul_(head_init_scale)
+        # self.head.bias.data.mul_(head_init_scale)
 
         #新增代码
         self.sff1 = SEFusion(dims[0])
-        self.sff1conv = nn.Conv2d(dims[0], decoder_dim, kernel_size=1, bias=False)
         self.sff2 = SEFusion(dims[0])
-        self.sff2conv = nn.Conv2d(dims[0], decoder_dim, kernel_size=1, bias=False)
         self.sff_stage = nn.ModuleList()
-        self.sffconv_stage = nn.ModuleList()
         self.sff_stage.append(SEFusion(dims[1]))
-        self.sffconv_stage.append(nn.Conv2d(dims[1], decoder_dim, kernel_size=1, bias=False))
         self.sff_stage.append(SEFusion(dims[2]))
-        self.sffconv_stage.append(nn.Conv2d(dims[2], decoder_dim, kernel_size=1, bias=False))
         self.sff_final = SEFusion(dims[3])
         
-        
-
 
     def encoder(self, x: Tensor, y:Tensor) -> Tuple[Tensor, List[Tensor]]:
         enc_features = []
@@ -447,37 +351,13 @@ class ConvNeXtV2_unet_modify(nn.Module):
         h5 = self.sff_final(x, y) #dim[3] 16
 
         #decoder
-        #hd4
-        hd4 = self.upsample_layers[0](h5)
-        h1_to_hd4 = self.h1_to_hd4(h1)
-        h2_to_hd4 = self.h2_to_hd4(h2)
-        h3_to_hd4 = self.h3_to_hd4(h3)
-        h4_to_hd4 = self.h4_to_hd4(h4)
-        hd4 = self.fusion_hd4(torch.cat([hd4, h1_to_hd4, h2_to_hd4, h3_to_hd4, h4_to_hd4], dim=1))
-        #hd3
-        hd3 = self.upsample_layers[1](hd4)
-        h1_to_hd3 = self.h1_to_hd3(h1)
-        h2_to_hd3 = self.h2_to_hd3(h2)
-        h3_to_hd3 = self.h3_to_hd3(h3)
-        h5_up_hd3 = self.h5_up_hd3(h5)
-        hd3 = self.fusion_hd3(torch.cat([hd3, h1_to_hd3, h2_to_hd3, h3_to_hd3, h5_up_hd3], dim=1))
-        #hd2
-        hd2 = self.upsample_layers[2](hd3)
-        h1_to_hd2 = self.h1_to_hd2(h1)
-        h2_to_hd2 = self.h2_to_hd2(h2)
-        hd4_up_hd2 = self.hd4_up_hd2(hd4)
-        h5_up_hd2 = self.h5_up_hd2(h5)
-        hd2 = self.fusion_hd2(torch.cat([hd2, h1_to_hd2, h2_to_hd2, hd4_up_hd2, h5_up_hd2], dim=1))
-        #hd1
-        hd1 = self.upsample_layers[3](hd2)
-        h1_to_hd1 = self.h1_to_hd1(h1)
-        hd4_up_hd1 = self.hd4_up_hd1(hd4)
-        hd3_up_hd1 = self.hd3_up_hd1(hd3)
-        h5_up_hd1 = self.h5_up_hd1(h5)
-        hd1 = self.fusion_hd1(torch.cat([hd1, h1_to_hd1, hd4_up_hd1, hd3_up_hd1, h5_up_hd1], dim=1))
+        x = self.project(h5)
+        x = self.decoder1(x, h4) #dim[2] 32
+        x = self.decoder2(x, h3) #dim[1] 64
+        x = self.decoder3(x, h2) #dim[0] 128
+        x = self.decoder4(x, h1) #dim[0] 256
 
-        x = self.initial_conv_upsample(hd1)
-        x = self.head(x)
+        x = self.segmentation_head(x)
 
         return x
             

@@ -16,14 +16,14 @@ import wandb
 from custom_repr import enable_custom_repr
 enable_custom_repr()
 
-use_wandb = False
+use_wandb = True
 if use_wandb:
     config = {
         "model": "convnextv2_unet",
-        "附加信息":"编码器独立，编码器特征融合，BN"
+        "附加信息":"编码器独立，编码器特征融合"
     }
     wandb.init(project="FTransUNet", config=config)
-    wandb.run.name = "convnextv2_unet-最终版-Vaihingen-tiny-inception"
+    wandb.run.name = "convnextv2_unet-最终版-Vaihingen-atto-GN"
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 torch.cuda.device_count.cache_clear() 
@@ -37,7 +37,7 @@ seed = 3407
 torch.manual_seed(seed)
 np.random.seed(seed)
 
-net = convnextv2_unet.__dict__["convnextv2_unet_tiny"](
+net = convnextv2_unet.__dict__["convnextv2_unet_atto"](
             num_classes=6,
             drop_path_rate=0.1,
             head_init_scale=0.001,
@@ -135,12 +135,12 @@ def test(net, test_ids, all=False, stride=WINDOW_SIZE[0], batch_size=BATCH_SIZE,
             all_gts.append(gt_e)
             clear_output()
 
-    accuracy, mf1, miou = metrics(np.concatenate([p.ravel() for p in all_preds]),
+    accuracy, mf1, miou, oa_dict = metrics(np.concatenate([p.ravel() for p in all_preds]),
                        np.concatenate([p.ravel() for p in all_gts]).ravel())
     if all:
         return accuracy, all_preds, all_gts
     else:
-        return accuracy, mf1, miou
+        return accuracy, mf1, miou, oa_dict
 
 
 def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1):
@@ -148,7 +148,6 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
     mean_losses = np.zeros(100000000)
     weights = weights.cuda()
 
-    # criterion = nn.NLLLoss2d(weight=weights)
     iter_ = 0
     acc_best = 90.0
 
@@ -190,14 +189,14 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
             current_lr = optimizer.param_groups[0]['lr']
         if e > 30:
             net.eval()
-            acc, mf1, miou = test(net, test_ids, all=False, stride=Stride_Size)
+            acc, mf1, miou, oa_dict = test(net, test_ids, all=False, stride=Stride_Size)
             net.train()
             if acc > acc_best:
-                # torch.save(net.state_dict(), '/mnt/lpai-dione/ssai/cvg/workspace/nefu/lht/FTransUNet/savemodel/convnextv2_epoch{}_{}'.format(e, acc))
+                torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/savemodel/convnextv2_epoch{}_{}'.format(e, acc))
                 acc_best = acc
 
             if use_wandb:
-                wandb.log({"epoch": e, "total_accuracy": acc, "train_loss": log_loss, "mF1": mf1, "mIoU": miou, "lr": current_lr})
+                wandb.log({"epoch": e, "total_accuracy": acc, "train_loss": log_loss, "mF1": mf1, "mIoU": miou, "lr": current_lr, **oa_dict})
             log_loss = 0
     print('acc_best: ', acc_best)
 

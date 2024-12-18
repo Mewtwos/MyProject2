@@ -16,7 +16,7 @@ WINDOW_SIZE = (256, 256) # Patch size
 
 STRIDE = 32 # Stride for testing
 IN_CHANNELS = 3 # Number of input channels (e.g. RGB)
-FOLDER = "/mnt/lpai-dione/ssai/cvg/workspace/nefu/lht/" # Replace with your "/path/to/the/ISPRS/dataset/folder/"
+FOLDER = "/home/lvhaitao/dataset/" # Replace with your "/path/to/the/ISPRS/dataset/folder/"
 BATCH_SIZE = 10 # Number of samples in a mini-batch
 
 LABELS = ["roads", "buildings", "low veg.", "trees", "cars", "clutter"] # Label names
@@ -339,4 +339,8 @@ def metrics(predictions, gts, label_values=LABELS):
     print('mean MIoU: %.4f' % (MIoU))
     print("---")
 
-    return accuracy, np.nanmean(F1Score[:5]), MIoU
+    oa_dict = {}
+    for l_id, score in enumerate(Acc):
+        oa_dict[label_values[l_id]] = score
+
+    return accuracy, np.nanmean(F1Score[:5]), MIoU, oa_dict

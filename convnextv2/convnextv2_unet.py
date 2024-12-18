@@ -40,12 +40,13 @@ class Block(nn.Module):
 
     def __init__(self, dim: int, drop_path=0.0):
         super().__init__()
-        # self.dwconv: nn.Module = nn.Conv2d(
-        #     dim, dim, kernel_size=7, padding=3, groups=dim
-        # ) 
-        self.dwconv: nn.Module = InceptionDWConv2d(dim)
+        self.dwconv: nn.Module = nn.Conv2d(
+            dim, dim, kernel_size=7, padding=3, groups=dim
+        ) 
+        # self.dwconv: nn.Module = InceptionDWConv2d(dim)
         # self.norm: nn.Module = LayerNorm(dim, eps=1e-6, data_format="channels_last")
-        self.norm: nn.Module = nn.BatchNorm2d(dim, eps=1e-6)
+        # self.norm: nn.Module = nn.BatchNorm2d(dim, eps=1e-6)
+        self.norm = nn.GroupNorm(int(dim / 16), dim)
 
         self.pwconv1: nn.Module = nn.Linear(
             dim, 4 * dim
@@ -76,7 +77,8 @@ class UpsampleBlock(nn.Module):
         self.upsample = nn.Upsample(scale_factor=scale_factor, mode="nearest")
         self.conv = nn.Conv2d(inp_dim, out_dim, kernel_size=3, padding=1)
         # self.norm = LayerNorm(out_dim, eps=1e-6, data_format="channels_first")
-        self.norm = nn.BatchNorm2d(out_dim, eps=1e-6)
+        # self.norm = nn.BatchNorm2d(out_dim, eps=1e-6)
+        self.norm = nn.GroupNorm(int(out_dim / 16), out_dim)
         self.act = nn.GELU()
 
     def forward(self, x: Tensor) -> Tensor:
@@ -142,13 +144,15 @@ class ConvNeXtV2_unet(nn.Module):
             self.initial_conv = nn.Sequential(
                 nn.Conv2d(in_chans, dims[0], kernel_size=3, stride=1, padding=1),
                 # LayerNorm(dims[0], eps=1e-6, data_format="channels_first"),
-                nn.BatchNorm2d(dims[0], eps=1e-6),
+                # nn.BatchNorm2d(dims[0], eps=1e-6),
+                nn.GroupNorm(int(dims[0] / 16), dims[0]),
                 nn.GELU(),
             )
             self.initial_conv2 = nn.Sequential(
                 nn.Conv2d(in_chans, dims[0], kernel_size=3, stride=1, padding=1),
                 # LayerNorm(dims[0], eps=1e-6, data_format="channels_first"),
-                nn.BatchNorm2d(dims[0], eps=1e-6),
+                # nn.BatchNorm2d(dims[0], eps=1e-6),
+                nn.GroupNorm(int(dims[0] / 16), dims[0]),
                 nn.GELU(),
             )
             self.stem = nn.Sequential(
@@ -160,7 +164,8 @@ class ConvNeXtV2_unet(nn.Module):
                     groups=dims[0],
                 ),
                 # LayerNorm(dims[0], eps=1e-6, data_format="channels_first"),
-                nn.BatchNorm2d(dims[0], eps=1e-6),
+                # nn.BatchNorm2d(dims[0], eps=1e-6),
+                nn.GroupNorm(int(dims[0] / 16), dims[0]),
             )
             self.stem2 = nn.Sequential(
                 nn.Conv2d(
@@ -171,18 +176,21 @@ class ConvNeXtV2_unet(nn.Module):
                     groups=dims[0],
                 ),
                 # LayerNorm(dims[0], eps=1e-6, data_format="channels_first"),
-                nn.BatchNorm2d(dims[0], eps=1e-6),
+                # nn.BatchNorm2d(dims[0], eps=1e-6),
+                nn.GroupNorm(int(dims[0] / 16), dims[0]),
             )
 
         for i in range(3):
             downsample_layer = nn.Sequential(
                 # LayerNorm(dims[i], eps=1e-6, data_format="channels_first"),
-                nn.BatchNorm2d(dims[i], eps=1e-6),
+                # nn.BatchNorm2d(dims[i], eps=1e-6),
+                nn.GroupNorm(int(dims[i] / 16), dims[i]),
                 nn.Conv2d(dims[i], dims[i + 1], kernel_size=2, stride=2),
             )
             downsample_layer2 = nn.Sequential(
                 # LayerNorm(dims[i], eps=1e-6, data_format="channels_first"),
-                nn.BatchNorm2d(dims[i], eps=1e-6),
+                # nn.BatchNorm2d(dims[i], eps=1e-6),
+                nn.GroupNorm(int(dims[i] / 16), dims[i]),
                 nn.Conv2d(dims[i], dims[i + 1], kernel_size=2, stride=2),
             )
             self.downsample_layers.append(downsample_layer)
@@ -214,7 +222,8 @@ class ConvNeXtV2_unet(nn.Module):
             cur += depths[i]
 
         # self.norm = nn.LayerNorm(dims[-1], eps=1e-6)  # final norm layer
-        self.norm = nn.BatchNorm2d(dims[-1], eps=1e-6)
+        # self.norm = nn.BatchNorm2d(dims[-1], eps=1e-6)
+        self.norm = nn.GroupNorm(int(dims[-1] / 16), dims[-1])
         self.head = nn.Conv2d(int(dims[0] / 2), num_classes, kernel_size=1, stride=1)
 
         self.upsample_layers = nn.ModuleList()
@@ -259,7 +268,8 @@ class ConvNeXtV2_unet(nn.Module):
                         # LayerNorm(
                         #     int(dims[i] / 2), eps=1e-6, data_format="channels_first"
                         # ),
-                        nn.BatchNorm2d(int(dims[i] / 2), eps=1e-6),
+                        # nn.BatchNorm2d(int(dims[i] / 2), eps=1e-6),
+                        nn.GroupNorm(int(dims[i] / 32), int(dims[i] / 2)),
                         nn.GELU(),
                     )
             else:
