@@ -5,7 +5,7 @@ from sklearn.metrics import confusion_matrix
 import random
 import time
 import itertools
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -26,21 +26,25 @@ if use_wandb:
         "model": "FTransUNet"
     }
     wandb.init(project="FTransUNet", config=config)
-    wandb.run.name = "FtransUNet-Vaihingen-无权重-adamw"
+    wandb.run.name = "FtransUNet-Vaihingen-有权重-adamw"
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 torch.cuda.device_count.cache_clear() 
 from pynvml import *
 nvmlInit()
 handle = nvmlDeviceGetHandleByIndex(int(os.environ["CUDA_VISIBLE_DEVICES"]))
 print("Device :", nvmlDeviceGetName(handle))
 
+seed = 3407
+torch.manual_seed(seed)
+np.random.seed(seed)
+
 config_vit = CONFIGS_ViT_seg['R50-ViT-B_16']
 config_vit.n_classes = 6
 config_vit.n_skip = 3
 config_vit.patches.grid = (int(256 / 16), int(256 / 16))
 net = ViT_seg(config_vit, img_size=256, num_classes=6).cuda()
-# net.load_from(weights=np.load(config_vit.pretrained_path))
+net.load_from(weights=np.load(config_vit.pretrained_path))
 params = 0
 for name, param in net.named_parameters():
     params += param.nelement()
@@ -123,12 +127,12 @@ def test(net, test_ids, all=False, stride=WINDOW_SIZE[0], batch_size=BATCH_SIZE,
             all_gts.append(gt_e)
             clear_output()
             
-    accuracy, mf1, miou = metrics(np.concatenate([p.ravel() for p in all_preds]),
+    accuracy, mf1, miou, oa_dict = metrics(np.concatenate([p.ravel() for p in all_preds]),
                        np.concatenate([p.ravel() for p in all_gts]).ravel())
     if all:
         return accuracy, all_preds, all_gts
     else:
-        return accuracy, mf1, miou
+        return accuracy, mf1, miou, oa_dict
 
 
 def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1):
@@ -168,18 +172,19 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
 
             # if e % save_epoch == 0:
             # if iter_ % 500 == 0:
-        net.eval()
-        acc, mf1, miou = test(net, test_ids, all=False, stride=Stride_Size)
-        net.train()
-        if acc > acc_best:
-            torch.save(net.state_dict(), '/mnt/lpai-dione/ssai/cvg/workspace/nefu/lht/FTransUNet/savemodel/segnet256_epoch{}_{}'.format(e, acc))
-            acc_best = acc
-        if scheduler is not None:
-            scheduler.step()
-            current_lr = optimizer.param_groups[0]['lr']
-        if use_wandb:
-            wandb.log({"epoch": e, "total_accuracy": acc, "train_loss": log_loss, "mF1": mf1, "mIoU": miou, "lr": current_lr})
-        log_loss = 0
+        if e > 30:
+            net.eval()
+            acc, mf1, miou, oa_dict = test(net, test_ids, all=False, stride=Stride_Size)
+            net.train()
+            if acc > acc_best:
+                torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/savemodel/FTransUNet_epoch{}_{}'.format(e, acc))
+                acc_best = acc
+            if scheduler is not None:
+                scheduler.step()
+                current_lr = optimizer.param_groups[0]['lr']
+            if use_wandb:
+                wandb.log({"epoch": e, "total_accuracy": acc, "train_loss": log_loss, "mF1": mf1, "mIoU": miou, "lr": current_lr, **oa_dict})
+            log_loss = 0
     print('acc_best: ', acc_best)
 
 #####   train   ####

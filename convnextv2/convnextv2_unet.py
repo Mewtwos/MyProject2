@@ -7,28 +7,9 @@ from .norm_layers import LayerNorm, GRN
 from .mfnet import SEFusion
 from .sa import FVit
 from .kan import KANLinear
+from .fca import FcaFusion
 
 
-class InceptionDWConv2d(nn.Module):
-    """ Inception depthweise convolution
-    """
-    def __init__(self, in_channels, square_kernel_size=3, band_kernel_size=11, branch_ratio=0.125):##原来是0.125
-        super().__init__()
-
-        gc = int(in_channels * branch_ratio)  # channel numbers of a convolution branch
-        self.dwconv_hw = nn.Conv2d(gc, gc, square_kernel_size, padding=square_kernel_size // 2, groups=gc)
-        self.dwconv_w = nn.Conv2d(gc, gc, kernel_size=(1, band_kernel_size), padding=(0, band_kernel_size // 2),
-                                  groups=gc)
-        self.dwconv_h = nn.Conv2d(gc, gc, kernel_size=(band_kernel_size, 1), padding=(band_kernel_size // 2, 0),
-                                  groups=gc)
-        self.split_indexes = (in_channels - 3 * gc, gc, gc, gc)
-
-    def forward(self, x):
-        x_id, x_hw, x_w, x_h = torch.split(x, self.split_indexes, dim=1)
-        return torch.cat(
-            (x_id, self.dwconv_hw(x_hw), self.dwconv_w(x_w), self.dwconv_h(x_h)),
-            dim=1,
-        )
 
 class Block(nn.Module):
     """ConvNeXtV2 Block.
@@ -43,10 +24,8 @@ class Block(nn.Module):
         self.dwconv: nn.Module = nn.Conv2d(
             dim, dim, kernel_size=7, padding=3, groups=dim
         ) 
-        # self.dwconv: nn.Module = InceptionDWConv2d(dim)
         # self.norm: nn.Module = LayerNorm(dim, eps=1e-6, data_format="channels_last")
-        # self.norm: nn.Module = nn.BatchNorm2d(dim, eps=1e-6)
-        self.norm = nn.GroupNorm(int(dim / 16), dim)
+        self.norm: nn.Module = nn.BatchNorm2d(dim, eps=1e-6)
 
         self.pwconv1: nn.Module = nn.Linear(
             dim, 4 * dim
@@ -74,11 +53,10 @@ class Block(nn.Module):
 class UpsampleBlock(nn.Module):
     def __init__(self, inp_dim: int, out_dim: int, scale_factor: float = 2.0):
         super().__init__()
-        self.upsample = nn.Upsample(scale_factor=scale_factor, mode="nearest")
+        self.upsample = nn.Upsample(scale_factor=scale_factor, mode="nearest")#把nearest改成bilinear
         self.conv = nn.Conv2d(inp_dim, out_dim, kernel_size=3, padding=1)
         # self.norm = LayerNorm(out_dim, eps=1e-6, data_format="channels_first")
-        # self.norm = nn.BatchNorm2d(out_dim, eps=1e-6)
-        self.norm = nn.GroupNorm(int(out_dim / 16), out_dim)
+        self.norm = nn.BatchNorm2d(out_dim, eps=1e-6)
         self.act = nn.GELU()
 
     def forward(self, x: Tensor) -> Tensor:
@@ -144,15 +122,13 @@ class ConvNeXtV2_unet(nn.Module):
             self.initial_conv = nn.Sequential(
                 nn.Conv2d(in_chans, dims[0], kernel_size=3, stride=1, padding=1),
                 # LayerNorm(dims[0], eps=1e-6, data_format="channels_first"),
-                # nn.BatchNorm2d(dims[0], eps=1e-6),
-                nn.GroupNorm(int(dims[0] / 16), dims[0]),
+                nn.BatchNorm2d(dims[0], eps=1e-6),
                 nn.GELU(),
             )
             self.initial_conv2 = nn.Sequential(
                 nn.Conv2d(in_chans, dims[0], kernel_size=3, stride=1, padding=1),
                 # LayerNorm(dims[0], eps=1e-6, data_format="channels_first"),
-                # nn.BatchNorm2d(dims[0], eps=1e-6),
-                nn.GroupNorm(int(dims[0] / 16), dims[0]),
+                nn.BatchNorm2d(dims[0], eps=1e-6),
                 nn.GELU(),
             )
             self.stem = nn.Sequential(
@@ -164,8 +140,7 @@ class ConvNeXtV2_unet(nn.Module):
                     groups=dims[0],
                 ),
                 # LayerNorm(dims[0], eps=1e-6, data_format="channels_first"),
-                # nn.BatchNorm2d(dims[0], eps=1e-6),
-                nn.GroupNorm(int(dims[0] / 16), dims[0]),
+                nn.BatchNorm2d(dims[0], eps=1e-6),
             )
             self.stem2 = nn.Sequential(
                 nn.Conv2d(
@@ -176,21 +151,18 @@ class ConvNeXtV2_unet(nn.Module):
                     groups=dims[0],
                 ),
                 # LayerNorm(dims[0], eps=1e-6, data_format="channels_first"),
-                # nn.BatchNorm2d(dims[0], eps=1e-6),
-                nn.GroupNorm(int(dims[0] / 16), dims[0]),
+                nn.BatchNorm2d(dims[0], eps=1e-6),
             )
 
         for i in range(3):
             downsample_layer = nn.Sequential(
                 # LayerNorm(dims[i], eps=1e-6, data_format="channels_first"),
-                # nn.BatchNorm2d(dims[i], eps=1e-6),
-                nn.GroupNorm(int(dims[i] / 16), dims[i]),
+                nn.BatchNorm2d(dims[i], eps=1e-6),
                 nn.Conv2d(dims[i], dims[i + 1], kernel_size=2, stride=2),
             )
             downsample_layer2 = nn.Sequential(
                 # LayerNorm(dims[i], eps=1e-6, data_format="channels_first"),
-                # nn.BatchNorm2d(dims[i], eps=1e-6),
-                nn.GroupNorm(int(dims[i] / 16), dims[i]),
+                nn.BatchNorm2d(dims[i], eps=1e-6),
                 nn.Conv2d(dims[i], dims[i + 1], kernel_size=2, stride=2),
             )
             self.downsample_layers.append(downsample_layer)
@@ -222,8 +194,7 @@ class ConvNeXtV2_unet(nn.Module):
             cur += depths[i]
 
         # self.norm = nn.LayerNorm(dims[-1], eps=1e-6)  # final norm layer
-        # self.norm = nn.BatchNorm2d(dims[-1], eps=1e-6)
-        self.norm = nn.GroupNorm(int(dims[-1] / 16), dims[-1])
+        self.norm = nn.BatchNorm2d(dims[-1], eps=1e-6)
         self.head = nn.Conv2d(int(dims[0] / 2), num_classes, kernel_size=1, stride=1)
 
         self.upsample_layers = nn.ModuleList()
@@ -268,8 +239,7 @@ class ConvNeXtV2_unet(nn.Module):
                         # LayerNorm(
                         #     int(dims[i] / 2), eps=1e-6, data_format="channels_first"
                         # ),
-                        # nn.BatchNorm2d(int(dims[i] / 2), eps=1e-6),
-                        nn.GroupNorm(int(dims[i] / 32), int(dims[i] / 2)),
+                        nn.BatchNorm2d(int(dims[i] / 2), eps=1e-6),
                         nn.GELU(),
                     )
             else:
@@ -293,10 +263,16 @@ class ConvNeXtV2_unet(nn.Module):
         #新增代码
         self.sff1 = SEFusion(dims[0])
         self.sff2 = SEFusion(dims[0])
+        # self.sff_stage = nn.ModuleList()
+        # self.sff_stage.append(SEFusion(dims[1]))
+        # self.sff_stage.append(SEFusion(dims[2]))
+        # self.sff_final = SEFusion(dims[3])
+        # self.sff1 = FcaFusion(dims[0]*2, 256, 256)
+        # self.sff2 = FcaFusion(dims[0]*2, 128, 128)
         self.sff_stage = nn.ModuleList()
-        self.sff_stage.append(SEFusion(dims[1]))
-        self.sff_stage.append(SEFusion(dims[2]))
-        self.sff_final = SEFusion(dims[3])
+        self.sff_stage.append(FcaFusion(dims[1]*2, 64, 64))
+        self.sff_stage.append(FcaFusion(dims[2]*2, 32, 32))
+        self.sff_final = FcaFusion(dims[3]*2, 16, 16)
         
 
 
