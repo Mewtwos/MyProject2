@@ -5,3 +5,4 @@ pretrainedmodel
 savemodel
 wandb
 README.md
+othermodel/__pycache__
