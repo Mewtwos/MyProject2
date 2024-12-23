@@ -1,15 +1,8 @@
 import numpy as np
-from glob import glob
 from tqdm import tqdm
-from sklearn.metrics import confusion_matrix
-import random
 import time
-import itertools
-# import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import torch.utils.data as data
 import torch.optim as optim
 import torch.optim.lr_scheduler
 import torch.nn.init
@@ -19,6 +12,7 @@ from IPython.display import clear_output
 from model.vitcross_seg_modeling import VisionTransformer as ViT_seg
 from model.vitcross_seg_modeling import CONFIGS as CONFIGS_ViT_seg
 import wandb
+from othermodel.ukan import UKAN
 
 use_wandb = True
 if use_wandb:
@@ -26,9 +20,9 @@ if use_wandb:
         "model": "FTransUNet"
     }
     wandb.init(project="FTransUNet", config=config)
-    wandb.run.name = "FtransUNet-Vaihingen-有权重-adamw"
+    wandb.run.name = "UKAN-Vaihingen-无权重-adamw"
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 torch.cuda.device_count.cache_clear() 
 from pynvml import *
 nvmlInit()
@@ -39,12 +33,14 @@ seed = 3407
 torch.manual_seed(seed)
 np.random.seed(seed)
 
-config_vit = CONFIGS_ViT_seg['R50-ViT-B_16']
-config_vit.n_classes = 6
-config_vit.n_skip = 3
-config_vit.patches.grid = (int(256 / 16), int(256 / 16))
-net = ViT_seg(config_vit, img_size=256, num_classes=6).cuda()
-net.load_from(weights=np.load(config_vit.pretrained_path))
+# config_vit = CONFIGS_ViT_seg['R50-ViT-B_16']
+# config_vit.n_classes = 6
+# config_vit.n_skip = 3
+# config_vit.patches.grid = (int(256 / 16), int(256 / 16))
+# net = ViT_seg(config_vit, img_size=256, num_classes=6).cuda()
+# net.load_from(weights=np.load(config_vit.pretrained_path))
+net = UKAN(num_classes=6, input_h=256, input_w=256, deep_supervision=False, embed_dims=[128, 160, 256], no_kan=False).cuda()
+
 params = 0
 for name, param in net.named_parameters():
     params += param.nelement()
@@ -177,7 +173,7 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
             acc, mf1, miou, oa_dict = test(net, test_ids, all=False, stride=Stride_Size)
             net.train()
             if acc > acc_best:
-                torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/savemodel/FTransUNet_epoch{}_{}'.format(e, acc))
+                torch.save(net.state_dict(), '/mnt/lpai-dione/ssai/cvg/workspace/nefu/lht/MyProject2/savemodel/UKAN_epoch{}_{}'.format(e, acc))
                 acc_best = acc
             if scheduler is not None:
                 scheduler.step()

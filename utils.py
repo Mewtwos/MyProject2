@@ -16,7 +16,7 @@ WINDOW_SIZE = (256, 256) # Patch size
 
 STRIDE = 32 # Stride for testing
 IN_CHANNELS = 3 # Number of input channels (e.g. RGB)
-FOLDER = "/home/lvhaitao/dataset/" # Replace with your "/path/to/the/ISPRS/dataset/folder/"
+FOLDER = "/mnt/lpai-dione/ssai/cvg/workspace/nefu/lht/dataset/" # Replace with your "/path/to/the/ISPRS/dataset/folder/"
 BATCH_SIZE = 10 # Number of samples in a mini-batch
 
 LABELS = ["roads", "buildings", "low veg.", "trees", "cars", "clutter"] # Label names
