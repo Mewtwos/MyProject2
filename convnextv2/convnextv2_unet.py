@@ -261,18 +261,20 @@ class ConvNeXtV2_unet(nn.Module):
         self.head.bias.data.mul_(head_init_scale)
 
         #新增代码
-        self.sff1 = SEFusion(dims[0])
-        self.sff2 = SEFusion(dims[0])
+        # self.sff1 = SEFusion(dims[0])
+        # self.sff2 = SEFusion(dims[0])
         # self.sff_stage = nn.ModuleList()
         # self.sff_stage.append(SEFusion(dims[1]))
         # self.sff_stage.append(SEFusion(dims[2]))
         # self.sff_final = SEFusion(dims[3])
-        # self.sff1 = FcaFusion(dims[0]*2, 256, 256)
-        # self.sff2 = FcaFusion(dims[0]*2, 128, 128)
+
+        #新融合方案
+        self.sff1 = FcaFusion(dims[0], 256, 256)
+        self.sff2 = FcaFusion(dims[0], 128, 128)
         self.sff_stage = nn.ModuleList()
-        self.sff_stage.append(FcaFusion(dims[1]*2, 64, 64))
-        self.sff_stage.append(FcaFusion(dims[2]*2, 32, 32))
-        self.sff_final = FcaFusion(dims[3]*2, 16, 16)
+        self.sff_stage.append(FcaFusion(dims[1], 64, 64))
+        self.sff_stage.append(FcaFusion(dims[2], 32, 32))
+        self.sff_final = FcaFusion(dims[3], 16, 16)
         
 
 

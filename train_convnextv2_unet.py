@@ -16,14 +16,14 @@ import wandb
 from custom_repr import enable_custom_repr
 enable_custom_repr()
 
-use_wandb = False
+use_wandb = True
 if use_wandb:
     config = {
         "model": "convnextv2_unet",
         "附加信息":"编码器独立，编码器特征融合"
     }
     wandb.init(project="FTransUNet", config=config)
-    wandb.run.name = "convnextv2_unet-最终版-Vaihingen-femto-fcafusion2"
+    wandb.run.name = "convnextv2_unet-最终版-Vaihingen-femto-dctpara"
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 torch.cuda.device_count.cache_clear() 

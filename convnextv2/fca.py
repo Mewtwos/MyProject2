@@ -120,11 +120,10 @@ class FcaFusion(nn.Module):
         input = self.fca2(input)
         return input
     
-
-# if __name__ == "__main__":
-#     # Test the FCA layer
-#     fca = MultiSpectralAttentionLayer(40, 256, 256)
-#     x = torch.randn(2, 40, 256, 256)
-#     y = fca(x)
-#     print(y.shape)
     
+# if __name__ == "__main__":
+#     fca = FcaFusion(64, 7, 7)
+#     x = torch.randn(1, 64, 7, 7)
+#     y = torch.randn(1, 64, 7, 7)
+#     out = fca(x, y)
+#     print(out.shape)
