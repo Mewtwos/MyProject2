@@ -12,8 +12,7 @@ from IPython.display import clear_output
 from model.vitcross_seg_modeling import VisionTransformer as ViT_seg
 from model.vitcross_seg_modeling import CONFIGS as CONFIGS_ViT_seg
 import wandb
-from othermodel.ukan import UKAN
-from othermodel.CMFNet import CMFNet
+from othermodel.CMGFNet import FuseNet
 
 use_wandb = False
 if use_wandb:
@@ -21,7 +20,7 @@ if use_wandb:
         "model": "FTransUNet"
     }
     wandb.init(project="FTransUNet", config=config)
-    wandb.run.name = "CMFNet-Vaihingen-有权重-adamw"
+    wandb.run.name = "CMGFNet-Vaihingen-有权重"
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 torch.cuda.device_count.cache_clear() 
@@ -34,26 +33,7 @@ seed = 3407
 torch.manual_seed(seed)
 np.random.seed(seed)
 
-net = CMFNet().cuda()
-vgg16_weights = torch.load('vgg16_bn-6c64b313.pth')
-mapped_weights = {}
-for k_vgg, k_segnet in zip(vgg16_weights.keys(), net.state_dict().keys()):
-    if "features" in k_vgg:
-        mapped_weights[k_segnet] = vgg16_weights[k_vgg]
-
-for it in net.state_dict().keys():
-    if it == 'conv1_1_d.weight':
-        avg = torch.mean(mapped_weights[it.replace('_d', '')].data, dim=1)
-        mapped_weights[it] = avg.unsqueeze(1)
-    if '_d' in it and it != 'conv1_1_d.weight':
-        if it.replace('_d', '') in mapped_weights:
-            mapped_weights[it] = mapped_weights[it.replace('_d', '')]
-try:
-    net.load_state_dict(mapped_weights)
-    print("Loaded VGG-16 weights in SegNet !")
-except:
-    pass
-
+net = FuseNet().cuda()
 
 params = 0
 for name, param in net.named_parameters():
@@ -123,7 +103,7 @@ def test(net, test_ids, all=False, stride=WINDOW_SIZE[0], batch_size=BATCH_SIZE,
                 dsm_patches = Variable(torch.from_numpy(dsm_patches).cuda(), volatile=True)
 
                 # Do the inference
-                outs = net(image_patches, dsm_patches)
+                outs, rgb_out, dsm_out = net(image_patches, dsm_patches)
                 outs = outs.data.cpu().numpy()
 
                 # Fill in the results array
@@ -159,7 +139,7 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
         for batch_idx, (data, dsm, target) in enumerate(train_loader):
             data, dsm, target = Variable(data.cuda()), Variable(dsm.cuda()), Variable(target.cuda())
             optimizer.zero_grad()
-            output = net(data, dsm)
+            output, rgbout, dsmout = net(data, dsm)
             loss = CrossEntropy2d(output, target, weight=weights)
             loss.backward()
             optimizer.step()
@@ -182,12 +162,12 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
 
             # if e % save_epoch == 0:
             # if iter_ % 500 == 0:
-        if e > 30:
+        if e > 0:
             net.eval()
             acc, mf1, miou, oa_dict = test(net, test_ids, all=False, stride=Stride_Size)
             net.train()
             if acc > acc_best:
-                torch.save(net.state_dict(), '/mnt/lpai-dione/ssai/cvg/workspace/nefu/lht/MyProject2/savemodel/UKAN_epoch{}_{}'.format(e, acc))
+                torch.save(net.state_dict(), '/mnt/lpai-dione/ssai/cvg/workspace/nefu/lht/MyProject2/savemodel/CMGFNet_epoch{}_{}'.format(e, acc))
                 acc_best = acc
             if scheduler is not None:
                 scheduler.step()
