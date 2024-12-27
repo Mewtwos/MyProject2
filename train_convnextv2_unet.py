@@ -12,9 +12,9 @@ from IPython.display import clear_output
 from convnextv2 import convnextv2_unet
 import wandb
 
-
 from custom_repr import enable_custom_repr
 enable_custom_repr()
+
 
 use_wandb = True
 if use_wandb:
@@ -23,9 +23,9 @@ if use_wandb:
         "附加信息":"编码器独立，编码器特征融合"
     }
     wandb.init(project="FTransUNet", config=config)
-    wandb.run.name = "convnextv2_unet-最终版-Vaihingen-femto-dctpara"
+    wandb.run.name = "convnextv2_unet-最终版-Vaihingen-atto-dwtconvfuse3"
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 torch.cuda.device_count.cache_clear() 
 os.environ["WORLD_SIZE"] = "1"
 from pynvml import *
@@ -37,7 +37,7 @@ seed = 3407
 torch.manual_seed(seed)
 np.random.seed(seed)
 
-net = convnextv2_unet.__dict__["convnextv2_unet_femto"](
+net = convnextv2_unet.__dict__["convnextv2_unet_atto"](
             num_classes=6,
             drop_path_rate=0.1,
             head_init_scale=0.001,
@@ -192,7 +192,7 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
             acc, mf1, miou, oa_dict = test(net, test_ids, all=False, stride=Stride_Size)
             net.train()
             if acc > acc_best:
-                torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/savemodel/convnextv2_epoch{}_{}'.format(e, acc))
+                torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/savemodel/convnextv2_dwtconvfuse2_epoch{}_{}'.format(e, acc))
                 acc_best = acc
 
             if use_wandb:

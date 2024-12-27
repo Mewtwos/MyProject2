@@ -8,6 +8,7 @@ from .mfnet import SEFusion
 from .sa import FVit
 from .kan import KANLinear
 from .fca import FcaFusion
+from .dwtconvfuse import DWTconvfuse
 
 
 
@@ -247,15 +248,6 @@ class ConvNeXtV2_unet(nn.Module):
                     UpsampleBlock(dims[i] * 2, int(dims[i] / 2), scale_factor=2)
                 )
 
-        #新增代码
-        # self.fvit = FVit(num_head=8, hidden_size=320)
-        # self.projx = nn.Conv2d(
-        #     in_channels=dims[-1], out_channels=256, kernel_size=1
-        # )
-        # self.projy = nn.Conv2d(
-        #     in_channels=dims[-1], out_channels=256, kernel_size=1
-        # )
-
         self.apply(self._init_weights)
         self.head.weight.data.mul_(head_init_scale)
         self.head.bias.data.mul_(head_init_scale)
@@ -269,15 +261,13 @@ class ConvNeXtV2_unet(nn.Module):
         # self.sff_final = SEFusion(dims[3])
 
         #新融合方案
-        self.sff1 = FcaFusion(dims[0], 256, 256)
-        self.sff2 = FcaFusion(dims[0], 128, 128)
+        self.sff1 = DWTconvfuse(dims[0])
+        self.sff2 = DWTconvfuse(dims[0])
         self.sff_stage = nn.ModuleList()
-        self.sff_stage.append(FcaFusion(dims[1], 64, 64))
-        self.sff_stage.append(FcaFusion(dims[2], 32, 32))
-        self.sff_final = FcaFusion(dims[3], 16, 16)
+        self.sff_stage.append(DWTconvfuse(dims[1]))
+        self.sff_stage.append(DWTconvfuse(dims[2]))
+        self.sff_final = DWTconvfuse(dims[3])
         
-
-
     def encoder(self, x: Tensor, y:Tensor) -> Tuple[Tensor, List[Tensor]]:
         enc_features = []
 
