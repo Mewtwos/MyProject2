@@ -23,9 +23,9 @@ if use_wandb:
         "附加信息":"编码器独立，编码器特征融合"
     }
     wandb.init(project="FTransUNet", config=config)
-    wandb.run.name = "convnextv2_unet-最终版-Vaihingen-atto-dwtconvfuse3"
+    wandb.run.name = "convnextv2_unet-最终版-Vaihingen-pico-dwtconvfuse3-dwtaf_2layer"
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 torch.cuda.device_count.cache_clear() 
 os.environ["WORLD_SIZE"] = "1"
 from pynvml import *
@@ -37,7 +37,7 @@ seed = 3407
 torch.manual_seed(seed)
 np.random.seed(seed)
 
-net = convnextv2_unet.__dict__["convnextv2_unet_atto"](
+net = convnextv2_unet.__dict__["convnextv2_unet_pico"](
             num_classes=6,
             drop_path_rate=0.1,
             head_init_scale=0.001,

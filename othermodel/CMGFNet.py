@@ -2,8 +2,8 @@ import torch
 import torchvision
 from torch import nn
 from torch.nn import functional as F
-import os
-os.environ['TORCH_HOME']='/mnt/lpai-dione/ssai/cvg/workspace/nefu/lht'
+# import os
+# os.environ['TORCH_HOME']='/mnt/lpai-dione/ssai/cvg/workspace/nefu/lht'
 
 class Upsample(nn.Module):
     
@@ -74,7 +74,7 @@ class Gated_Fusion(nn.Module):
     
 class FuseNet(nn.Module):
     
-    def __init__(self, num_classes, pretrained=False):
+    def __init__(self, num_classes, pretrained=True):
         
         super().__init__()
         
@@ -176,7 +176,7 @@ class FuseNet(nn.Module):
     def forward(self, x_rgb , x_dsm):
         
         # dsm_encoder
-        
+        x_dsm = x_dsm.unsqueeze(1)
         y1 = self.enc_dsm1(x_dsm)         # bs * 64 * W/2 * H/2
         y1_side = self.side1_cross(y1)
 

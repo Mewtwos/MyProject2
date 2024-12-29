@@ -33,7 +33,10 @@ seed = 3407
 torch.manual_seed(seed)
 np.random.seed(seed)
 
-net = FuseNet().cuda()
+import os
+os.environ['TORCH_HOME']='/home/lvhaitao'
+
+net = FuseNet(num_classes=6, pretrained=True).cuda()
 
 params = 0
 for name, param in net.named_parameters():

@@ -9,6 +9,7 @@ from .sa import FVit
 from .kan import KANLinear
 from .fca import FcaFusion
 from .dwtconvfuse import DWTconvfuse
+from .dwtaf import DWTAF
 
 
 
@@ -266,7 +267,8 @@ class ConvNeXtV2_unet(nn.Module):
         self.sff_stage = nn.ModuleList()
         self.sff_stage.append(DWTconvfuse(dims[1]))
         self.sff_stage.append(DWTconvfuse(dims[2]))
-        self.sff_final = DWTconvfuse(dims[3])
+        # self.sff_final = DWTconvfuse(dims[3])
+        self.dwtaf = DWTAF(num_layers=2, num_heads=16, hidden_size=dims[-1])
         
     def encoder(self, x: Tensor, y:Tensor) -> Tuple[Tensor, List[Tensor]]:
         enc_features = []
@@ -292,7 +294,12 @@ class ConvNeXtV2_unet(nn.Module):
                 x = self.sff_stage[i](x, y)
                 enc_features.append(x)
         
-        x = self.sff_final(x, y)
+        # x = self.sff_final(x, y)
+        h, w = x.shape[2], x.shape[3]
+        x = x.view(x.shape[0], x.shape[1], -1).permute(0, 2, 1)
+        y = y.view(y.shape[0], y.shape[1], -1).permute(0, 2, 1)
+        x = self.dwtaf(x, y)
+        x = x.permute(0, 2, 1).view(x.shape[0], x.shape[2], h, w)
 
         # h, w = x.shape[2], x.shape[3]
         # x = x.view(x.shape[0], x.shape[1], -1).permute(0, 2, 1)
