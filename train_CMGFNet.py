@@ -14,7 +14,7 @@ from model.vitcross_seg_modeling import CONFIGS as CONFIGS_ViT_seg
 import wandb
 from othermodel.CMGFNet import FuseNet
 
-use_wandb = False
+use_wandb = True
 if use_wandb:
     config = {
         "model": "FTransUNet"
@@ -165,12 +165,12 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
 
             # if e % save_epoch == 0:
             # if iter_ % 500 == 0:
-        if e > 0:
+        if e > 30:
             net.eval()
             acc, mf1, miou, oa_dict = test(net, test_ids, all=False, stride=Stride_Size)
             net.train()
             if acc > acc_best:
-                torch.save(net.state_dict(), '/mnt/lpai-dione/ssai/cvg/workspace/nefu/lht/MyProject2/savemodel/CMGFNet_epoch{}_{}'.format(e, acc))
+                torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/savemodel/CMGFNet_epoch{}_{}'.format(e, acc))
                 acc_best = acc
             if scheduler is not None:
                 scheduler.step()

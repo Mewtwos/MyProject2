@@ -6,6 +6,8 @@ import math
 def remap_checkpoint_keys(ckpt): 
     new_ckpt = OrderedDict()
     for k, v in ckpt.items():   #改预训练模型中一些参数的名字，因为convnext_unet里没有encoder等等这些名字
+        if "bn" in k:
+            k = k.replace(".bn", "")
         if k.startswith("encoder"):
             k = ".".join(k.split(".")[1:])  # remove encoder in the name
         if k.endswith("kernel"):
@@ -35,6 +37,20 @@ def remap_checkpoint_keys(ckpt):
         else:
             new_k = k
         new_ckpt[new_k] = v
+    #为第二个编码器分支创建key
+    for k, v in new_ckpt.copy().items():
+        if "downsample_layers" in k:
+            new_k = k.replace("downsample_layers", "downsample_layers2")
+            new_ckpt[new_k] = v
+        if "initial_conv" in k:
+            new_k = k.replace("initial_conv", "initial_conv2")
+            new_ckpt[new_k] = v
+        if "stem" in k:
+            new_k = k.replace("stem", "stem2")
+            new_ckpt[new_k] = v
+        if "stages" in k:
+            new_k = k.replace("stages", "stages2")
+            new_ckpt[new_k] = v
 
     # reshape grn affine parameters and biases
     for k, v in new_ckpt.items():
@@ -117,7 +133,7 @@ def load_custom_checkpoint(model, pretrained_path):
     print("Load pre-trained checkpoint from: %s" % pretrained_path)
     checkpoint_model = checkpoint["model"] if "model" in checkpoint else checkpoint
     state_dict = model.state_dict()
-    for k in ["head.weight", "head.bias"]:  #去掉加载的模型的头
+    for k in ["head.weight", "head.bias"]:
         if (
             k in checkpoint_model
             and checkpoint_model[k].shape != state_dict[k].shape
@@ -128,7 +144,7 @@ def load_custom_checkpoint(model, pretrained_path):
     # remove decoder weights
     checkpoint_model_keys = list(checkpoint_model.keys())
     for k in checkpoint_model_keys:
-        if "decoder" in k or "mask_token" in k or "proj" in k or "pred" in k:
+        if "decoder" in k or "mask_token" in k or "proj" in k or "pred" in k or "loss_fn" in k or "dwtaf" in k:
             print(f"Removing key {k} from pretrained checkpoint")
             del checkpoint_model[k]
 

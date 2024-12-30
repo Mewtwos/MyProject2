@@ -9,21 +9,24 @@ import torch.nn.init
 from utils import *
 from torch.autograd import Variable
 from IPython.display import clear_output
-from model.vitcross_seg_modeling import VisionTransformer as ViT_seg
-from model.vitcross_seg_modeling import CONFIGS as CONFIGS_ViT_seg
+# from model.vitcross_seg_modeling import VisionTransformer as ViT_seg
+# from model.vitcross_seg_modeling import CONFIGS as CONFIGS_ViT_seg
 import wandb
-from othermodel.ukan import UKAN
-from othermodel.CMFNet import CMFNet
+# from othermodel.ukan import UKAN
+# from othermodel.CMFNet import CMFNet
+# from othermodel.rs3mamba import RS3Mamba, load_pretrained_ckpt
+from othermodel.Transunet import VisionTransformer as TransUNet
+from othermodel.Transunet import CONFIGS as CONFIGS_ViT_seg
 
 use_wandb = False
 if use_wandb:
     config = {
-        "model": "FTransUNet"
+        "model": "TransUNet",
     }
     wandb.init(project="FTransUNet", config=config)
-    wandb.run.name = "CMFNet-Vaihingen-有权重-adamw"
+    wandb.run.name = "TransUnet-Vaihingen-有权重-adamw"
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 torch.cuda.device_count.cache_clear() 
 from pynvml import *
 nvmlInit()
@@ -34,26 +37,38 @@ seed = 3407
 torch.manual_seed(seed)
 np.random.seed(seed)
 
-net = CMFNet().cuda()
-vgg16_weights = torch.load('vgg16_bn-6c64b313.pth')
-mapped_weights = {}
-for k_vgg, k_segnet in zip(vgg16_weights.keys(), net.state_dict().keys()):
-    if "features" in k_vgg:
-        mapped_weights[k_segnet] = vgg16_weights[k_vgg]
+#CMFNet
+# net = CMFNet().cuda()
+# vgg16_weights = torch.load('vgg16_bn-6c64b313.pth')
+# mapped_weights = {}
+# for k_vgg, k_segnet in zip(vgg16_weights.keys(), net.state_dict().keys()):
+#     if "features" in k_vgg:
+#         mapped_weights[k_segnet] = vgg16_weights[k_vgg]
 
-for it in net.state_dict().keys():
-    if it == 'conv1_1_d.weight':
-        avg = torch.mean(mapped_weights[it.replace('_d', '')].data, dim=1)
-        mapped_weights[it] = avg.unsqueeze(1)
-    if '_d' in it and it != 'conv1_1_d.weight':
-        if it.replace('_d', '') in mapped_weights:
-            mapped_weights[it] = mapped_weights[it.replace('_d', '')]
-try:
-    net.load_state_dict(mapped_weights)
-    print("Loaded VGG-16 weights in SegNet !")
-except:
-    pass
+# for it in net.state_dict().keys():
+#     if it == 'conv1_1_d.weight':
+#         avg = torch.mean(mapped_weights[it.replace('_d', '')].data, dim=1)
+#         mapped_weights[it] = avg.unsqueeze(1)
+#     if '_d' in it and it != 'conv1_1_d.weight':
+#         if it.replace('_d', '') in mapped_weights:
+#             mapped_weights[it] = mapped_weights[it.replace('_d', '')]
+# try:
+#     net.load_state_dict(mapped_weights)
+#     print("Loaded VGG-16 weights in SegNet !")
+# except:
+#     pass
 
+#rs3mamba
+# net = RS3Mamba(num_classes=N_CLASSES).cuda()
+# net = load_pretrained_ckpt(net)
+
+#TransUNet
+config_vit = CONFIGS_ViT_seg['R50-ViT-B_16']
+config_vit.n_classes = 6
+config_vit.n_skip = 3
+config_vit.patches.grid = (14, 14)
+net = TransUNet(config_vit, 256, 6).cuda()
+net.load_from(weights=np.load(config_vit.pretrained_path))
 
 params = 0
 for name, param in net.named_parameters():
@@ -70,16 +85,6 @@ print("Stride Size: ", Stride_Size)
 train_set = ISPRS_dataset(train_ids, cache=CACHE)
 train_loader = torch.utils.data.DataLoader(train_set,batch_size=BATCH_SIZE)
 
-base_lr = 0.01
-params_dict = dict(net.named_parameters())
-params = []
-for key, value in params_dict.items():
-    if '_D' in key:
-        # Decoder weights are trained at the nominal learning rate
-        params += [{'params':[value],'lr': base_lr}]
-    else:
-        # Encoder weights are trained at lr / 2 (we have VGG-16 weights as initialization)
-        params += [{'params':[value],'lr': base_lr / 2}]
 
 # optimizer = optim.SGD(net.parameters(), lr=base_lr, momentum=0.9, weight_decay=0.0005)
 optimizer = optim.AdamW(net.parameters(), lr=1e-4, weight_decay=0.0005)
@@ -150,7 +155,7 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
     mean_losses = np.zeros(100000000)
     weights = weights.cuda()
 
-    criterion = nn.NLLLoss2d(weight=weights)
+    # criterion = nn.NLLLoss2d(weight=weights)
     iter_ = 0
     acc_best = 90.0
     log_loss = 0
@@ -187,7 +192,7 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
             acc, mf1, miou, oa_dict = test(net, test_ids, all=False, stride=Stride_Size)
             net.train()
             if acc > acc_best:
-                torch.save(net.state_dict(), '/mnt/lpai-dione/ssai/cvg/workspace/nefu/lht/MyProject2/savemodel/UKAN_epoch{}_{}'.format(e, acc))
+                torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/savemodel/transunet_epoch{}_{}'.format(e, acc))
                 acc_best = acc
             if scheduler is not None:
                 scheduler.step()

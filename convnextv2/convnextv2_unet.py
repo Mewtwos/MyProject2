@@ -196,7 +196,7 @@ class ConvNeXtV2_unet(nn.Module):
             cur += depths[i]
 
         # self.norm = nn.LayerNorm(dims[-1], eps=1e-6)  # final norm layer
-        self.norm = nn.BatchNorm2d(dims[-1], eps=1e-6)
+        # self.norm = nn.BatchNorm2d(dims[-1], eps=1e-6)
         self.head = nn.Conv2d(int(dims[0] / 2), num_classes, kernel_size=1, stride=1)
 
         self.upsample_layers = nn.ModuleList()
