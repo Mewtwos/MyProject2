@@ -18,8 +18,8 @@ from torch.nn import CrossEntropyLoss, Dropout, Softmax, Linear, Conv2d, LayerNo
 from torch.nn.modules.utils import _pair
 from scipy import ndimage
 
-from MyProject2.model.vit_seg_modeling_resnet_skip import PreActBottleneck, StdConv2d
-from . import vit_seg_configs as configs
+from model.vit_seg_modeling_resnet_skip import PreActBottleneck, StdConv2d
+from model import vit_seg_configs as configs
 
 
 

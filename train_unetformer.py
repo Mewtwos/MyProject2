@@ -2,24 +2,16 @@ import numpy as np
 from tqdm import tqdm
 import time
 import torch
-# import torch.nn as nn
 import torch.optim as optim
 import torch.optim.lr_scheduler
 import torch.nn.init
 from utils import *
 from torch.autograd import Variable
 from IPython.display import clear_output
-# from model.vitcross_seg_modeling import VisionTransformer as ViT_seg
-# from model.vitcross_seg_modeling import CONFIGS as CONFIGS_ViT_seg
 import wandb
-# from othermodel.ukan import UKAN
-# from othermodel.CMFNet import CMFNet
-# from othermodel.rs3mamba import RS3Mamba, load_pretrained_ckpt
-# from othermodel.Transunet import VisionTransformer as TransUNet
-# from othermodel.Transunet import CONFIGS as CONFIGS_ViT_seg
-from othermodel.unetformer import UNetFormer
+from othermodel.unetformer import SoftCrossEntropyLoss, UNetFormer
 
-use_wandb = False
+use_wandb = True
 if use_wandb:
     config = {
         "model": "TransUNet",
@@ -37,39 +29,6 @@ print("Device :", nvmlDeviceGetName(handle))
 seed = 3407
 torch.manual_seed(seed)
 np.random.seed(seed)
-
-#CMFNet
-# net = CMFNet().cuda()
-# vgg16_weights = torch.load('vgg16_bn-6c64b313.pth')
-# mapped_weights = {}
-# for k_vgg, k_segnet in zip(vgg16_weights.keys(), net.state_dict().keys()):
-#     if "features" in k_vgg:
-#         mapped_weights[k_segnet] = vgg16_weights[k_vgg]
-
-# for it in net.state_dict().keys():
-#     if it == 'conv1_1_d.weight':
-#         avg = torch.mean(mapped_weights[it.replace('_d', '')].data, dim=1)
-#         mapped_weights[it] = avg.unsqueeze(1)
-#     if '_d' in it and it != 'conv1_1_d.weight':
-#         if it.replace('_d', '') in mapped_weights:
-#             mapped_weights[it] = mapped_weights[it.replace('_d', '')]
-# try:
-#     net.load_state_dict(mapped_weights)
-#     print("Loaded VGG-16 weights in SegNet !")
-# except:
-#     pass
-
-#rs3mamba
-# net = RS3Mamba(num_classes=N_CLASSES).cuda()
-# net = load_pretrained_ckpt(net)
-
-#TransUNet
-# config_vit = CONFIGS_ViT_seg['R50-ViT-B_16']
-# config_vit.n_classes = 6
-# config_vit.n_skip = 3
-# config_vit.patches.grid = (14, 14)
-# net = TransUNet(config_vit, 256, 6).cuda()
-# net.load_from(weights=np.load(config_vit.pretrained_path))
 
 #Unetformer
 net = UNetFormer(num_classes=6).cuda()
@@ -163,13 +122,14 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
     iter_ = 0
     acc_best = 90.0
     log_loss = 0
+    aux_loss = SoftCrossEntropyLoss(smooth_factor=0.05, ignore_index=255)
     for e in range(1, epochs + 1):
         net.train()
         for batch_idx, (data, dsm, target) in enumerate(train_loader):
             data, dsm, target = Variable(data.cuda()), Variable(dsm.cuda()), Variable(target.cuda())
             optimizer.zero_grad()
-            output = net(data, dsm)
-            loss = CrossEntropy2d(output, target, weight=weights)
+            output, aux_out = net(data, dsm)
+            loss = CrossEntropy2d(output, target, weight=weights) + 0.4* aux_loss(aux_out, target)
             loss.backward()
             optimizer.step()
 
@@ -191,7 +151,7 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
 
             # if e % save_epoch == 0:
             # if iter_ % 500 == 0:
-        if e > 30:
+        if e > 20:
             net.eval()
             acc, mf1, miou, oa_dict = test(net, test_ids, all=False, stride=Stride_Size)
             net.train()
@@ -214,12 +174,3 @@ print('Total Time Cost: ',time_end-time_start)
 if use_wandb:
     wandb.finish()
 
-#####   test   ####
-# net.load_state_dict(torch.load('YOUR_MODEL'))
-# net.eval()
-# acc, all_preds, all_gts = test(net, test_ids, all=True, stride=32)
-# print("Acc: ", acc)
-# for p, id_ in zip(all_preds, test_ids):
-#     img = convert_to_color(p)
-#     # plt.imshow(img) and plt.show()
-#     io.imsave('./results/inference_tile{}.png'.format(id_), img)
