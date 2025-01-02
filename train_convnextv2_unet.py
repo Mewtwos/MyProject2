@@ -15,14 +15,14 @@ import wandb
 from custom_repr import enable_custom_repr
 enable_custom_repr()
 
-use_wandb = True
+use_wandb = False
 if use_wandb:
     config = {
         "model": "convnextv2_unet",
         "附加信息":"编码器独立，编码器特征融合"
     }
     wandb.init(project="FTransUNet", config=config)
-    wandb.run.name = "convnextv2_unet-最终版-Vaihingen-femto-dwtconvfuse3-dwtaf_2layer-无权重"
+    wandb.run.name = "convnextv2_unet-Vaihingen-atto-dwtaf_1layer-imagenet权重"
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 torch.cuda.device_count.cache_clear() 
@@ -36,17 +36,17 @@ seed = 3407
 torch.manual_seed(seed)
 np.random.seed(seed)
 
-net = convnextv2_unet.__dict__["convnextv2_unet_femto"](
+net = convnextv2_unet.__dict__["convnextv2_unet_atto"](
             num_classes=6,
             drop_path_rate=0.1,
             head_init_scale=0.001,
-            patch_size=16,
+            patch_size=16,  ###原来是16
             use_orig_stem=False,
             in_chans=3,
         )
-# print("开始加载权重")
-# net = load_custom_checkpoint(net, "/home/lvhaitao/checkpoint-80.pth")
-# print("预训练权重加载完成")
+print("开始加载权重")
+net = load_custom_checkpoint(net, "/home/lvhaitao/convnextv2_atto_1k_224_fcmae.pt")
+print("预训练权重加载完成")
 # net.copy_all_parameters()
 # print("编码器权重拷贝完成")
 net.to(torch.device("cuda"))
@@ -66,15 +66,15 @@ print("Stride Size: ", Stride_Size)
 train_set = ISPRS_dataset(train_ids, cache=CACHE)
 train_loader = torch.utils.data.DataLoader(train_set, batch_size=BATCH_SIZE, drop_last=True, num_workers=8, pin_memory=True)
 
-base_lr = 0.01
-params_dict = dict(net.named_parameters())
-params = []
-for key, value in params_dict.items():
-    if '_D' in key:
-        # Decoder weights are trained at the nominal learning rate
-        params += [{'params': [value], 'lr': base_lr}]
-    else:
-        params += [{'params': [value], 'lr': base_lr}]
+# base_lr = 0.01
+# params_dict = dict(net.named_parameters())
+# params = []
+# for key, value in params_dict.items():
+#     if '_D' in key:
+#         # Decoder weights are trained at the nominal learning rate
+#         params += [{'params': [value], 'lr': base_lr}]
+#     else:
+#         params += [{'params': [value], 'lr': base_lr}]
 
 # optimizer = optim.SGD(net.parameters(), lr=base_lr, momentum=0.9, weight_decay=0.0005)
 optimizer = optim.AdamW(net.parameters(), lr=1e-4, weight_decay=0.0005)
@@ -191,7 +191,7 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
             acc, mf1, miou, oa_dict = test(net, test_ids, all=False, stride=Stride_Size)
             net.train()
             if acc > acc_best:
-                torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/savemodel/notpre_convnextv2_epoch{}_{}'.format(e, acc))
+                # torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/savemodel/_convnextv2_epoch{}_{}'.format(e, acc))
                 acc_best = acc
 
             if use_wandb:

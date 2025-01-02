@@ -10,6 +10,8 @@ from torch.autograd import Variable
 from IPython.display import clear_output
 import wandb
 from othermodel.unetformer import SoftCrossEntropyLoss, UNetFormer
+from custom_repr import enable_custom_repr
+enable_custom_repr()
 
 use_wandb = True
 if use_wandb:
@@ -17,7 +19,7 @@ if use_wandb:
         "model": "TransUNet",
     }
     wandb.init(project="FTransUNet", config=config)
-    wandb.run.name = "Unetformer-Vaihingen-有权重-adamw"
+    wandb.run.name = "Unetformer-Vaihingen-有权重-adamw-withoutaux"
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 torch.cuda.device_count.cache_clear() 
@@ -122,14 +124,14 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
     iter_ = 0
     acc_best = 90.0
     log_loss = 0
-    aux_loss = SoftCrossEntropyLoss(smooth_factor=0.05, ignore_index=255)
+    # aux_loss = SoftCrossEntropyLoss(smooth_factor=0.05, ignore_index=255)
     for e in range(1, epochs + 1):
         net.train()
         for batch_idx, (data, dsm, target) in enumerate(train_loader):
             data, dsm, target = Variable(data.cuda()), Variable(dsm.cuda()), Variable(target.cuda())
             optimizer.zero_grad()
             output, aux_out = net(data, dsm)
-            loss = CrossEntropy2d(output, target, weight=weights) + 0.4* aux_loss(aux_out, target)
+            loss = CrossEntropy2d(output, target, weight=weights)
             loss.backward()
             optimizer.step()
 

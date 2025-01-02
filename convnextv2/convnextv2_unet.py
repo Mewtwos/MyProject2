@@ -268,7 +268,16 @@ class ConvNeXtV2_unet(nn.Module):
         self.sff_stage.append(DWTconvfuse(dims[1]))
         self.sff_stage.append(DWTconvfuse(dims[2]))
         # self.sff_final = DWTconvfuse(dims[3])
-        self.dwtaf = DWTAF(num_layers=2, num_heads=16, hidden_size=dims[-1])
+        self.dwtaf1 = DWTAF(num_layers=1, num_heads=16, hidden_size=dims[-1])
+        # self.proj1 = nn.Sequential(
+        #     nn.Conv2d(in_channels=dims[-1], out_channels=512, kernel_size=1,bias=False)
+        # )
+        # self.proj2 = nn.Sequential(
+        #     nn.Conv2d(in_channels=dims[-1], out_channels=512, kernel_size=1,bias=False)
+        # )
+        # self.proj3 = nn.Sequential(
+        #     nn.Conv2d(in_channels=512, out_channels=dims[-1], kernel_size=1,bias=False)
+        # )
         
     def encoder(self, x: Tensor, y:Tensor) -> Tuple[Tensor, List[Tensor]]:
         enc_features = []
@@ -298,7 +307,7 @@ class ConvNeXtV2_unet(nn.Module):
         h, w = x.shape[2], x.shape[3]
         x = x.view(x.shape[0], x.shape[1], -1).permute(0, 2, 1)
         y = y.view(y.shape[0], y.shape[1], -1).permute(0, 2, 1)
-        x = self.dwtaf(x, y)
+        x = self.dwtaf1(x, y)
         x = x.permute(0, 2, 1).view(x.shape[0], x.shape[2], h, w)
 
         # h, w = x.shape[2], x.shape[3]
