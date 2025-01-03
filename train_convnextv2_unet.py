@@ -66,15 +66,6 @@ print("Stride Size: ", Stride_Size)
 train_set = ISPRS_dataset(train_ids, cache=CACHE)
 train_loader = torch.utils.data.DataLoader(train_set, batch_size=BATCH_SIZE, drop_last=True, num_workers=8, pin_memory=True)
 
-# base_lr = 0.01
-# params_dict = dict(net.named_parameters())
-# params = []
-# for key, value in params_dict.items():
-#     if '_D' in key:
-#         # Decoder weights are trained at the nominal learning rate
-#         params += [{'params': [value], 'lr': base_lr}]
-#     else:
-#         params += [{'params': [value], 'lr': base_lr}]
 
 # optimizer = optim.SGD(net.parameters(), lr=base_lr, momentum=0.9, weight_decay=0.0005)
 optimizer = optim.AdamW(net.parameters(), lr=1e-4, weight_decay=0.0005)

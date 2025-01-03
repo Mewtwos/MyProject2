@@ -5,7 +5,7 @@ import math
 
 def remap_checkpoint_keys(ckpt): 
     new_ckpt = OrderedDict()
-    for k, v in ckpt.items():   #改预训练模型中一些参数的名字，因为convnext_unet里没有encoder等等这些名字
+    for k, v in ckpt.items():  
         if "bn" in k:
             k = k.replace(".bn", "")
         if k.startswith("encoder2"):
