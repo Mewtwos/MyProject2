@@ -13,7 +13,7 @@ from othermodel.unetformer import SoftCrossEntropyLoss, UNetFormer
 from custom_repr import enable_custom_repr
 enable_custom_repr()
 
-use_wandb = True
+use_wandb = False
 if use_wandb:
     config = {
         "model": "TransUNet",
@@ -21,7 +21,7 @@ if use_wandb:
     wandb.init(project="FTransUNet", config=config)
     wandb.run.name = "Unetformer-Vaihingen-有权重-adamw-withoutaux"
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 torch.cuda.device_count.cache_clear() 
 from pynvml import *
 nvmlInit()

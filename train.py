@@ -17,17 +17,19 @@ import wandb
 # from othermodel.rs3mamba import RS3Mamba, load_pretrained_ckpt
 # from othermodel.Transunet import VisionTransformer as TransUNet
 # from othermodel.Transunet import CONFIGS as CONFIGS_ViT_seg
-from othermodel.unetformer import UNetFormer
+from convnextv2 import convnextv2_unet_decoder
+from custom_repr import enable_custom_repr
+enable_custom_repr()
 
-use_wandb = False
+use_wandb = True
 if use_wandb:
     config = {
         "model": "TransUNet",
     }
     wandb.init(project="FTransUNet", config=config)
-    wandb.run.name = "Unetformer-Vaihingen-有权重-adamw"
+    wandb.run.name = "convnextv2_unet_decoder_pico-Vaihingen-无权重-adamw-dwtaf_2layer"
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 torch.cuda.device_count.cache_clear() 
 from pynvml import *
 nvmlInit()
@@ -71,8 +73,15 @@ np.random.seed(seed)
 # net = TransUNet(config_vit, 256, 6).cuda()
 # net.load_from(weights=np.load(config_vit.pretrained_path))
 
-#Unetformer
-net = UNetFormer(num_classes=6).cuda()
+#convnextv2_unet_unetformer_decoder
+net = convnextv2_unet_decoder.__dict__["convnextv2_unet_pico"](
+            num_classes=6,
+            drop_path_rate=0.1,
+            head_init_scale=0.001,
+            patch_size=16,  ###原来是16
+            use_orig_stem=False,
+            in_chans=3,
+        ).cuda()
 
 params = 0
 for name, param in net.named_parameters():
@@ -191,16 +200,16 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
 
             # if e % save_epoch == 0:
             # if iter_ % 500 == 0:
+        if scheduler is not None:
+            scheduler.step()
+            current_lr = optimizer.param_groups[0]['lr']
         if e > 30:
             net.eval()
             acc, mf1, miou, oa_dict = test(net, test_ids, all=False, stride=Stride_Size)
             net.train()
             if acc > acc_best:
-                torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/savemodel/unetformer_epoch{}_{}'.format(e, acc))
+                # torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/savemodel/unetformer_epoch{}_{}'.format(e, acc))
                 acc_best = acc
-            if scheduler is not None:
-                scheduler.step()
-                current_lr = optimizer.param_groups[0]['lr']
             if use_wandb:
                 wandb.log({"epoch": e, "total_accuracy": acc, "train_loss": log_loss, "mF1": mf1, "mIoU": miou, "lr": current_lr, **oa_dict})
             log_loss = 0
@@ -214,12 +223,3 @@ print('Total Time Cost: ',time_end-time_start)
 if use_wandb:
     wandb.finish()
 
-#####   test   ####
-# net.load_state_dict(torch.load('YOUR_MODEL'))
-# net.eval()
-# acc, all_preds, all_gts = test(net, test_ids, all=True, stride=32)
-# print("Acc: ", acc)
-# for p, id_ in zip(all_preds, test_ids):
-#     img = convert_to_color(p)
-#     # plt.imshow(img) and plt.show()
-#     io.imsave('./results/inference_tile{}.png'.format(id_), img)
