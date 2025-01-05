@@ -18,18 +18,20 @@ import wandb
 from othermodel.Transunet import VisionTransformer as TransUNet
 from othermodel.Transunet import CONFIGS as CONFIGS_ViT_seg
 from convnextv2 import convnextv2_unet_decoder
+from othermodel.MAResUNet import MAResUNet
+from othermodel.ABCNet import ABCNet
 from custom_repr import enable_custom_repr
 enable_custom_repr()
 
-use_wandb = True
+use_wandb = False
 if use_wandb:
     config = {
         "model": "TransUNet",
     }
     wandb.init(project="FTransUNet", config=config)
-    wandb.run.name = "convnextv2_unet_pico-Vaihingen-无权重-dwtaf_2layer-新编码器排布"
+    wandb.run.name = "ABCNet-Vaihingen-有权重"
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 torch.cuda.device_count.cache_clear() 
 from pynvml import *
 nvmlInit()
@@ -74,7 +76,7 @@ np.random.seed(seed)
 # net.load_from(weights=np.load(config_vit.pretrained_path))
 
 #convnextv2_unet_unetformer_decoder
-net = convnextv2_unet_decoder.__dict__["convnextv2_unet_pico"](
+net = convnextv2_unet_decoder.__dict__["convnextv2_unet_base"](
             num_classes=6,
             drop_path_rate=0.1,
             head_init_scale=0.001,
@@ -82,6 +84,12 @@ net = convnextv2_unet_decoder.__dict__["convnextv2_unet_pico"](
             use_orig_stem=False,
             in_chans=3,
         ).cuda()
+
+#MAResUNet
+# net = MAResUNet(num_classes=6).cuda()
+
+#ABCNet
+# net = ABCNet(6).cuda()
 
 params = 0
 for name, param in net.named_parameters():
@@ -208,7 +216,7 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
             acc, mf1, miou, oa_dict = test(net, test_ids, all=False, stride=Stride_Size)
             net.train()
             if acc > acc_best:
-                # torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/savemodel/unetformer_epoch{}_{}'.format(e, acc))
+                # torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/savemodel/ABCNet_epoch{}_{}'.format(e, acc))
                 acc_best = acc
             if use_wandb:
                 wandb.log({"epoch": e, "total_accuracy": acc, "train_loss": log_loss, "mF1": mf1, "mIoU": miou, "lr": current_lr, **oa_dict})

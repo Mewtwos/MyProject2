@@ -162,7 +162,7 @@ def load_custom_checkpoint(model, pretrained_path):
     # remove decoder weights
     checkpoint_model_keys = list(checkpoint_model.keys())
     for k in checkpoint_model_keys:
-        if "decoder" in k or "mask_token" in k or "pred" in k or "loss_fn" in k or "dwtaf" in k or "proj" in k or "encoder2" in k: #dwtaf proj
+        if "decoder" in k or "mask_token" in k or "pred" in k or "loss_fn" in k or "dwtaf" in k or "proj" in k or "encoder2" in k or "bn" in k: #dwtaf proj
             print(f"Removing key {k} from pretrained checkpoint")
             del checkpoint_model[k]
 

@@ -44,9 +44,9 @@ net = convnextv2_unet.__dict__["convnextv2_unet_pico"](
             use_orig_stem=False,
             in_chans=3,
         )
-# print("开始加载权重")
-# net = load_custom_checkpoint(net, "/home/lvhaitao/convnextv2_atto_1k_224_fcmae.pt")
-# print("预训练权重加载完成")
+print("开始加载权重")
+net = load_custom_checkpoint(net, "/home/lvhaitao/convnextv2_pico_1k_224_fcmae.pt")
+print("预训练权重加载完成")
 # net.copy_all_parameters()
 # print("编码器权重拷贝完成")
 net.to(torch.device("cuda"))

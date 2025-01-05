@@ -4,9 +4,14 @@ import torch.nn as nn
 from timm.models.layers import trunc_normal_, DropPath
 from torch import Tensor
 from .norm_layers import LayerNorm, GRN
+# from .mfnet import SEFusion
+# from .sa import FVit
+# from .kan import KANLinear
+# from .fca import FcaFusion
 from .dwtconvfuse import DWTconvfuse
 from .dwtaf import DWTAF
-from .unetformer_decoder import Decoder
+
+
 
 class Block(nn.Module):
     """ConvNeXtV2 Block.
@@ -63,6 +68,7 @@ class UpsampleBlock(nn.Module):
         x = self.act(x)
         return x
 
+
 class ConvNeXtV2_unet(nn.Module):
     """ConvNeXt V2
 
@@ -104,75 +110,62 @@ class ConvNeXtV2_unet(nn.Module):
             nn.ModuleList()
         )  
         self.num_stage = len(depths)
-        # if self.use_orig_stem:
-        #     self.stem_orig = nn.Sequential(
-        #         nn.Conv2d(
-        #             in_chans,
-        #             dims[0],
-        #             kernel_size=patch_size // (2 ** (self.num_stage - 1)),
-        #             stride=patch_size // (2 ** (self.num_stage - 1)),
-        #         ),
-        #         LayerNorm(dims[0], eps=1e-6, data_format="channels_first"),
-        #     )
-        # else:
-        #     self.initial_conv = nn.Sequential(
-        #         nn.Conv2d(in_chans, dims[0], kernel_size=3, stride=1, padding=1),
-        #         # LayerNorm(dims[0], eps=1e-6, data_format="channels_first"),
-        #         nn.BatchNorm2d(dims[0], eps=1e-6),
-        #         nn.GELU(),
-        #     )
-        #     self.initial_conv2 = nn.Sequential(
-        #         nn.Conv2d(in_chans, dims[0], kernel_size=3, stride=1, padding=1),
-        #         # LayerNorm(dims[0], eps=1e-6, data_format="channels_first"),
-        #         nn.BatchNorm2d(dims[0], eps=1e-6),
-        #         nn.GELU(),
-        #     )
-        #     self.stem = nn.Sequential(
-        #         nn.Conv2d(
-        #             dims[0],
-        #             dims[0],
-        #             kernel_size=patch_size // (2 ** (self.num_stage - 1)),
-        #             stride=patch_size // (2 ** (self.num_stage - 1)),
-        #             groups=dims[0],
-        #         ),
-        #         # LayerNorm(dims[0], eps=1e-6, data_format="channels_first"),
-        #         nn.BatchNorm2d(dims[0], eps=1e-6),
-        #     )
-        #     self.stem2 = nn.Sequential(
-        #         nn.Conv2d(
-        #             dims[0],
-        #             dims[0],
-        #             kernel_size=patch_size // (2 ** (self.num_stage - 1)),
-        #             stride=patch_size // (2 ** (self.num_stage - 1)),
-        #             groups=dims[0],
-        #         ),
-        #         # LayerNorm(dims[0], eps=1e-6, data_format="channels_first"),
-        #         nn.BatchNorm2d(dims[0], eps=1e-6),
-        #     )
-        downsample_layer = nn.Sequential(
-            nn.Conv2d(3, dims[0], kernel_size=2, stride=2),
-            nn.BatchNorm2d(dims[0], eps=1e-6),
-            nn.GELU(),
-        )
-        downsample_layer2 = nn.Sequential(
-            nn.Conv2d(3, dims[0], kernel_size=2, stride=2),
-            nn.BatchNorm2d(dims[0], eps=1e-6),
-            nn.GELU(),
-        )
-        self.downsample_layers.append(downsample_layer)
-        self.downsample_layers2.append(downsample_layer2)
+        if self.use_orig_stem:
+            self.stem_orig = nn.Sequential(
+                nn.Conv2d(
+                    in_chans,
+                    dims[0],
+                    kernel_size=patch_size // (2 ** (self.num_stage - 1)),
+                    stride=patch_size // (2 ** (self.num_stage - 1)),
+                ),
+                LayerNorm(dims[0], eps=1e-6, data_format="channels_first"),
+            )
+        else:
+            self.initial_conv = nn.Sequential(
+                nn.Conv2d(in_chans, dims[0], kernel_size=3, stride=1, padding=1),
+                # LayerNorm(dims[0], eps=1e-6, data_format="channels_first"),
+                nn.BatchNorm2d(dims[0], eps=1e-6),
+                nn.GELU(),
+            )
+            self.initial_conv2 = nn.Sequential(
+                nn.Conv2d(in_chans, dims[0], kernel_size=3, stride=1, padding=1),
+                # LayerNorm(dims[0], eps=1e-6, data_format="channels_first"),
+                nn.BatchNorm2d(dims[0], eps=1e-6),
+                nn.GELU(),
+            )
+            self.stem = nn.Sequential(
+                nn.Conv2d(
+                    dims[0],
+                    dims[0],
+                    kernel_size=patch_size // (2 ** (self.num_stage - 1)),
+                    stride=patch_size // (2 ** (self.num_stage - 1)),
+                    groups=dims[0],
+                ),
+                # LayerNorm(dims[0], eps=1e-6, data_format="channels_first"),
+                nn.BatchNorm2d(dims[0], eps=1e-6),
+            )
+            self.stem2 = nn.Sequential(
+                nn.Conv2d(
+                    dims[0],
+                    dims[0],
+                    kernel_size=patch_size // (2 ** (self.num_stage - 1)),
+                    stride=patch_size // (2 ** (self.num_stage - 1)),
+                    groups=dims[0],
+                ),
+                # LayerNorm(dims[0], eps=1e-6, data_format="channels_first"),
+                nn.BatchNorm2d(dims[0], eps=1e-6),
+            )
+
         for i in range(3):
             downsample_layer = nn.Sequential(
                 # LayerNorm(dims[i], eps=1e-6, data_format="channels_first"),
+                nn.BatchNorm2d(dims[i], eps=1e-6),
                 nn.Conv2d(dims[i], dims[i + 1], kernel_size=2, stride=2),
-                nn.BatchNorm2d(dims[i+1], eps=1e-6),
-                nn.GELU(),
             )
             downsample_layer2 = nn.Sequential(
                 # LayerNorm(dims[i], eps=1e-6, data_format="channels_first"),
+                nn.BatchNorm2d(dims[i], eps=1e-6),
                 nn.Conv2d(dims[i], dims[i + 1], kernel_size=2, stride=2),
-                nn.BatchNorm2d(dims[i+1], eps=1e-6),
-                nn.GELU(),
             )
             self.downsample_layers.append(downsample_layer)
             self.downsample_layers2.append(downsample_layer2)
@@ -202,12 +195,16 @@ class ConvNeXtV2_unet(nn.Module):
             self.stages2.append(stage2)
             cur += depths[i]
 
-        self.head = nn.Conv2d(int(dims[0]), num_classes, kernel_size=1, stride=1)
+        # self.norm = nn.LayerNorm(dims[-1], eps=1e-6)  # final norm layer
+        # self.norm = nn.BatchNorm2d(dims[-1], eps=1e-6)
+        self.head = nn.Conv2d(int(dims[0] / 2), num_classes, kernel_size=1, stride=1)
+
         self.upsample_layers = nn.ModuleList()
+
         for i in reversed(range(self.num_stage)):
             if i == 3:
                 self.upsample_layers.append(
-                    UpsampleBlock(dims[i], int(dims[i] / 2), scale_factor=2)
+                    UpsampleBlock(dims[i-1], int(dims[i] / 2), scale_factor=2)
                 )
             elif i == 0:
                 self.upsample_layers.append(
@@ -233,28 +230,36 @@ class ConvNeXtV2_unet(nn.Module):
                         nn.GELU(),
                     )
                 else:
-                    pass
-                    # self.initial_conv_upsample = nn.Sequential(
-                    #     nn.Conv2d(
-                    #         dims[i] * 2,
-                    #         int(dims[i] / 2),
-                    #         kernel_size=3,
-                    #         stride=1,
-                    #         padding=1,
-                    #     ),
-                    #     # LayerNorm(
-                    #     #     int(dims[i] / 2), eps=1e-6, data_format="channels_first"
-                    #     # ),
-                    #     nn.BatchNorm2d(int(dims[i] / 2), eps=1e-6),
-                    #     nn.GELU(),
-                    # )
+                    self.initial_conv_upsample = nn.Sequential(
+                        nn.Conv2d(
+                            dims[i] * 2,
+                            int(dims[i] / 2),
+                            kernel_size=3,
+                            stride=1,
+                            padding=1,
+                        ),
+                        # LayerNorm(
+                        #     int(dims[i] / 2), eps=1e-6, data_format="channels_first"
+                        # ),
+                        nn.BatchNorm2d(int(dims[i] / 2), eps=1e-6),
+                        nn.GELU(),
+                    )
             else:
                 self.upsample_layers.append(
                     UpsampleBlock(dims[i] * 2, int(dims[i] / 2), scale_factor=2)
                 )
+
         self.apply(self._init_weights)
         self.head.weight.data.mul_(head_init_scale)
         self.head.bias.data.mul_(head_init_scale)
+
+        #新增代码
+        # self.sff1 = SEFusion(dims[0])
+        # self.sff2 = SEFusion(dims[0])
+        # self.sff_stage = nn.ModuleList()
+        # self.sff_stage.append(SEFusion(dims[1]))
+        # self.sff_stage.append(SEFusion(dims[2]))
+        # self.sff_final = SEFusion(dims[3])
 
         #新融合方案
         self.sff1 = DWTconvfuse(dims[0])
@@ -262,13 +267,74 @@ class ConvNeXtV2_unet(nn.Module):
         self.sff_stage = nn.ModuleList()
         self.sff_stage.append(DWTconvfuse(dims[1]))
         self.sff_stage.append(DWTconvfuse(dims[2]))
-
-        self.dwtaf1 = DWTAF(num_layers=2, num_heads=16, hidden_size=512)
-        # self.proj1 = nn.Sequential(
-        #     nn.Conv2d(in_channels=dims[-1], out_channels=512, kernel_size=1,bias=False)
-        # )
-        # self.decoder = Decoder(encoder_channels=dims, decode_channels=64, dropout=0.1, window_size=8, num_classes=6)
+        # self.sff_final = DWTconvfuse(dims[3])
+        self.dwtaf1 = DWTAF(num_layers=1, num_heads=16, hidden_size=768)
+        self.proj1 = nn.Sequential(
+            nn.Conv2d(in_channels=dims[-1], out_channels=768, kernel_size=1,bias=False)
+        )
+        self.proj2 = nn.Sequential(
+            nn.Conv2d(in_channels=dims[-1], out_channels=768, kernel_size=1,bias=False)
+        )
+        self.proj3 = nn.Sequential(
+            nn.Conv2d(in_channels=768, out_channels=512, kernel_size=1,bias=False)
+        )
         
+    def encoder(self, x: Tensor, y:Tensor) -> Tuple[Tensor, List[Tensor]]:
+        enc_features = []
+
+        x = self.initial_conv(x)
+        y = self.initial_conv2(y)
+        x = self.sff1(x, y)
+        enc_features.append(x)
+        x = self.stem(x)
+        y = self.stem2(y)
+        x = self.sff2(x, y)
+        enc_features.append(x)
+
+        x = self.stages[0](x)
+        y = self.stages2[0](y)
+
+        for i in range(3):
+            x = self.downsample_layers[i](x)
+            y = self.downsample_layers2[i](y)
+            x = self.stages[i + 1](x)
+            y = self.stages2[i + 1](y)
+            if i < 2:
+                x = self.sff_stage[i](x, y)
+                enc_features.append(x)
+        
+        # x = self.sff_final(x, y)
+        h, w = x.shape[2], x.shape[3]
+        x = self.proj1(x)
+        y = self.proj2(y)
+        x = x.view(x.shape[0], x.shape[1], -1).permute(0, 2, 1)
+        y = y.view(y.shape[0], y.shape[1], -1).permute(0, 2, 1)
+        x = self.dwtaf1(x, y)
+        x = x.permute(0, 2, 1).view(x.shape[0], x.shape[2], h, w)
+        x = self.proj3(x)
+
+        # h, w = x.shape[2], x.shape[3]
+        # x = x.view(x.shape[0], x.shape[1], -1).permute(0, 2, 1)
+        # y = y.view(y.shape[0], y.shape[1], -1).permute(0, 2, 1)
+        # x, y = self.fvit(x, y)
+        # x = x + y
+        # x = x.permute(0, 2, 1).view(x.shape[0], x.shape[2], h, w)
+
+        return x, enc_features
+
+    def decoder(self, x: Tensor, enc_features: List[Tensor]):
+
+        for i in range(3):
+            x = self.upsample_layers[i](x)
+            tmp = enc_features.pop()
+            x = torch.cat([x, tmp], dim=1)
+        x = self.upsample_layers[3](x)
+        if not self.use_orig_stem:
+            tmp = enc_features.pop()
+            x = torch.cat([x, tmp], dim=1)
+        x = self.initial_conv_upsample(x)
+
+        return x
 
     def _init_weights(self, m):
         if isinstance(m, (nn.Conv2d, nn.Linear)):
@@ -280,67 +346,10 @@ class ConvNeXtV2_unet(nn.Module):
         x = x.float()
         y = y.float()
         y = y.unsqueeze(1).repeat(1, 3, 1, 1)
-        
-        # x = self.initial_conv(x)
-        # y = self.initial_conv2(y)
-        # x = self.sff1(x, y)
-        # res1 = x
-        # x = self.stem(x)
-        # y = self.stem2(y)
-        # x = self.sff2(x, y)
-        # res2 = x
-
-        x = self.downsample_layers[0](x)
-        y = self.downsample_layers2[0](y)
-        x = self.stages[0](x)
-        y = self.stages2[0](y)
-        x = self.sff1(x, y)
-        res1 = x
-        x = self.downsample_layers[1](x)
-        y = self.downsample_layers2[1](y)
-        x = self.stages[1](x)
-        y = self.stages2[1](y)
-        x = self.sff_stage[0](x, y)
-        res2 = x
-        x = self.downsample_layers[2](x)
-        y = self.downsample_layers2[2](y)
-        x = self.stages[2](x)
-        y = self.stages2[2](y)
-        x = self.sff_stage[1](x, y)
-        res3 = x
-        x = self.downsample_layers[3](x)
-        y = self.downsample_layers2[3](y)
-        x = self.stages[3](x)
-        y = self.stages2[3](y)
-
-        # res = []
-        # for i in range(3):
-        #     x = self.downsample_layers[i](x)
-        #     y = self.downsample_layers2[i](y)
-        #     x = self.stages[i + 1](x)
-        #     y = self.stages2[i + 1](y)
-        #     if i < 2:
-        #         x = self.sff_stage[i](x, y)
-        #         res.append(x)
-        
-        h, w = x.shape[2], x.shape[3]
-        x = x.view(x.shape[0], x.shape[1], -1).permute(0, 2, 1)
-        y = y.view(y.shape[0], y.shape[1], -1).permute(0, 2, 1)
-        x = self.dwtaf1(x, y)
-        x = x.permute(0, 2, 1).view(x.shape[0], x.shape[2], h, w)
-
-
-        #decoder
-        # x = self.decoder(res1,res2,res3,res4,256,256)
-        x = self.upsample_layers[0](x)
-        x = torch.cat([x, res3], dim=1)
-        x = self.upsample_layers[1](x)
-        x = torch.cat([x, res2], dim=1)
-        x = self.upsample_layers[2](x)
-        x = torch.cat([x, res1], dim=1)
-        x = self.upsample_layers[3](x)
-        # x = self.initial_conv_upsample(x)
+        x, enc_features = self.encoder(x, y)
+        x = self.decoder(x, enc_features)
         x = self.head(x)
+
         return x
             
     
