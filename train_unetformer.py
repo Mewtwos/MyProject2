@@ -11,6 +11,7 @@ from IPython.display import clear_output
 import wandb
 from othermodel.unetformer import SoftCrossEntropyLoss, UNetFormer
 from custom_repr import enable_custom_repr
+from torchinfo import summary
 enable_custom_repr()
 
 use_wandb = False
@@ -34,6 +35,7 @@ np.random.seed(seed)
 
 #Unetformer
 net = UNetFormer(num_classes=6).cuda()
+summary(net, input_size=[(10, 3, 256, 256), (10, 1, 256, 256)])
 
 params = 0
 for name, param in net.named_parameters():

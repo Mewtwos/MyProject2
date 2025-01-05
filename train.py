@@ -15,8 +15,8 @@ import wandb
 # from othermodel.ukan import UKAN
 # from othermodel.CMFNet import CMFNet
 # from othermodel.rs3mamba import RS3Mamba, load_pretrained_ckpt
-# from othermodel.Transunet import VisionTransformer as TransUNet
-# from othermodel.Transunet import CONFIGS as CONFIGS_ViT_seg
+from othermodel.Transunet import VisionTransformer as TransUNet
+from othermodel.Transunet import CONFIGS as CONFIGS_ViT_seg
 from convnextv2 import convnextv2_unet_decoder
 from custom_repr import enable_custom_repr
 enable_custom_repr()
@@ -27,7 +27,7 @@ if use_wandb:
         "model": "TransUNet",
     }
     wandb.init(project="FTransUNet", config=config)
-    wandb.run.name = "convnextv2_unet_decoder_pico-Vaihingen-无权重-adamw-dwtaf_2layer"
+    wandb.run.name = "convnextv2_unet_pico-Vaihingen-无权重-dwtaf_2layer-新编码器排布"
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 torch.cuda.device_count.cache_clear() 
@@ -218,6 +218,7 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
 #####   train   ####
 time_start=time.time()
 train(net, optimizer, 50, scheduler)
+# test(net, test_ids, all=False, stride=Stride_Size)
 time_end=time.time()
 print('Total Time Cost: ',time_end-time_start)
 if use_wandb:

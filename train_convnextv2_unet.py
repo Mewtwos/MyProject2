@@ -15,16 +15,16 @@ import wandb
 from custom_repr import enable_custom_repr
 enable_custom_repr()
 
-use_wandb = False
+use_wandb = True
 if use_wandb:
     config = {
         "model": "convnextv2_unet",
         "附加信息":"编码器独立，编码器特征融合"
     }
     wandb.init(project="FTransUNet", config=config)
-    wandb.run.name = "convnextv2_unet-Vaihingen-atto-dwtaf_1layer-imagenet权重"
+    wandb.run.name = "convnextv2_unet-Vaihingen-pico-dwtaf_12layer"
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 torch.cuda.device_count.cache_clear() 
 os.environ["WORLD_SIZE"] = "1"
 from pynvml import *
@@ -36,7 +36,7 @@ seed = 3407
 torch.manual_seed(seed)
 np.random.seed(seed)
 
-net = convnextv2_unet.__dict__["convnextv2_unet_atto"](
+net = convnextv2_unet.__dict__["convnextv2_unet_pico"](
             num_classes=6,
             drop_path_rate=0.1,
             head_init_scale=0.001,
@@ -44,9 +44,9 @@ net = convnextv2_unet.__dict__["convnextv2_unet_atto"](
             use_orig_stem=False,
             in_chans=3,
         )
-print("开始加载权重")
-net = load_custom_checkpoint(net, "/home/lvhaitao/convnextv2_atto_1k_224_fcmae.pt")
-print("预训练权重加载完成")
+# print("开始加载权重")
+# net = load_custom_checkpoint(net, "/home/lvhaitao/convnextv2_atto_1k_224_fcmae.pt")
+# print("预训练权重加载完成")
 # net.copy_all_parameters()
 # print("编码器权重拷贝完成")
 net.to(torch.device("cuda"))

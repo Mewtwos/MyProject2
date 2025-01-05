@@ -14,7 +14,7 @@ from model.vitcross_seg_modeling import CONFIGS as CONFIGS_ViT_seg
 import wandb
 from othermodel.CMGFNet import FuseNet
 
-use_wandb = True
+use_wandb = False
 if use_wandb:
     config = {
         "model": "FTransUNet"
@@ -53,20 +53,8 @@ print("Stride Size: ", Stride_Size)
 train_set = ISPRS_dataset(train_ids, cache=CACHE)
 train_loader = torch.utils.data.DataLoader(train_set,batch_size=BATCH_SIZE)
 
-base_lr = 0.01
-params_dict = dict(net.named_parameters())
-params = []
-for key, value in params_dict.items():
-    if '_D' in key:
-        # Decoder weights are trained at the nominal learning rate
-        params += [{'params':[value],'lr': base_lr}]
-    else:
-        # Encoder weights are trained at lr / 2 (we have VGG-16 weights as initialization)
-        params += [{'params':[value],'lr': base_lr / 2}]
 
-# optimizer = optim.SGD(net.parameters(), lr=base_lr, momentum=0.9, weight_decay=0.0005)
 optimizer = optim.AdamW(net.parameters(), lr=1e-4, weight_decay=0.0005)
-# We define the scheduler
 scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [25, 35, 45], gamma=0.1)
 
 def test(net, test_ids, all=False, stride=WINDOW_SIZE[0], batch_size=BATCH_SIZE, window_size=WINDOW_SIZE):
@@ -165,6 +153,9 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
 
             # if e % save_epoch == 0:
             # if iter_ % 500 == 0:
+        if scheduler is not None:
+            scheduler.step()
+            current_lr = optimizer.param_groups[0]['lr']
         if e > 30:
             net.eval()
             acc, mf1, miou, oa_dict = test(net, test_ids, all=False, stride=Stride_Size)
@@ -172,9 +163,6 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
             if acc > acc_best:
                 torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/savemodel/CMGFNet_epoch{}_{}'.format(e, acc))
                 acc_best = acc
-            if scheduler is not None:
-                scheduler.step()
-                current_lr = optimizer.param_groups[0]['lr']
             if use_wandb:
                 wandb.log({"epoch": e, "total_accuracy": acc, "train_loss": log_loss, "mF1": mf1, "mIoU": miou, "lr": current_lr, **oa_dict})
             log_loss = 0

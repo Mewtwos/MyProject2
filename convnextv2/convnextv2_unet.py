@@ -268,7 +268,7 @@ class ConvNeXtV2_unet(nn.Module):
         self.sff_stage.append(DWTconvfuse(dims[1]))
         self.sff_stage.append(DWTconvfuse(dims[2]))
         # self.sff_final = DWTconvfuse(dims[3])
-        self.dwtaf1 = DWTAF(num_layers=1, num_heads=16, hidden_size=dims[-1])
+        self.dwtaf1 = DWTAF(num_layers=12, num_heads=16, hidden_size=dims[-1])
         # self.proj1 = nn.Sequential(
         #     nn.Conv2d(in_channels=dims[-1], out_channels=512, kernel_size=1,bias=False)
         # )
