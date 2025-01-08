@@ -9,29 +9,31 @@ import torch.nn.init
 from utils import *
 from torch.autograd import Variable
 from IPython.display import clear_output
-# from model.vitcross_seg_modeling import VisionTransformer as ViT_seg
-# from model.vitcross_seg_modeling import CONFIGS as CONFIGS_ViT_seg
+from model.vitcross_seg_modeling import VisionTransformer as ViT_seg
+from model.vitcross_seg_modeling import CONFIGS as CONFIGS_ViT_seg
 import wandb
 # from othermodel.ukan import UKAN
 # from othermodel.CMFNet import CMFNet
 # from othermodel.rs3mamba import RS3Mamba, load_pretrained_ckpt
 from othermodel.Transunet import VisionTransformer as TransUNet
-from othermodel.Transunet import CONFIGS as CONFIGS_ViT_seg
-from convnextv2 import convnextv2_unet_decoder
+# from othermodel.Transunet import CONFIGS as CONFIGS_ViT_seg
+from convnextv2 import convnextv2_unet_modify
 from othermodel.MAResUNet import MAResUNet
 from othermodel.ABCNet import ABCNet
+from convnextv2.helpers import load_custom_checkpoint
 from custom_repr import enable_custom_repr
 enable_custom_repr()
 
-use_wandb = False
+use_wandb = True
 if use_wandb:
     config = {
         "model": "TransUNet",
     }
     wandb.init(project="FTransUNet", config=config)
-    wandb.run.name = "ABCNet-Vaihingen-有权重"
+    wandb.run.name = "convnextv2-tiny-Vaihingen-Imagenet权重(模型使用bn)-dwtaf12layer(LAM)6sa6ca"
+    # wandb.run.name = "Ftransunet-Vaihingen-有权重"
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 torch.cuda.device_count.cache_clear() 
 from pynvml import *
 nvmlInit()
@@ -75,8 +77,8 @@ np.random.seed(seed)
 # net = TransUNet(config_vit, 256, 6).cuda()
 # net.load_from(weights=np.load(config_vit.pretrained_path))
 
-#convnextv2_unet_unetformer_decoder
-net = convnextv2_unet_decoder.__dict__["convnextv2_unet_base"](
+#convnextv2_unet_modify
+net = convnextv2_unet_modify.__dict__["convnextv2_unet_tiny"](
             num_classes=6,
             drop_path_rate=0.1,
             head_init_scale=0.001,
@@ -84,12 +86,23 @@ net = convnextv2_unet_decoder.__dict__["convnextv2_unet_base"](
             use_orig_stem=False,
             in_chans=3,
         ).cuda()
-
+net = load_custom_checkpoint(net, "/home/lvhaitao/convnextv2_tiny_1k_224_fcmae.pt")
+print("预训练权重加载完成")
 #MAResUNet
 # net = MAResUNet(num_classes=6).cuda()
+# state_dict = net.state_dict()
+# pretrained_dict = torch.load("/home/lvhaitao/.cache/torch/hub/checkpoints/resnet34-b627a593.pth")
 
 #ABCNet
 # net = ABCNet(6).cuda()
+
+#Ftransunet
+# config_vit = CONFIGS_ViT_seg['R50-ViT-B_16']
+# config_vit.n_classes = 6
+# config_vit.n_skip = 3
+# config_vit.patches.grid = (int(256 / 16), int(256 / 16))
+# net = ViT_seg(config_vit, img_size=256, num_classes=6).cuda()
+# net.load_from(weights=np.load(config_vit.pretrained_path))
 
 params = 0
 for name, param in net.named_parameters():
@@ -106,10 +119,7 @@ print("Stride Size: ", Stride_Size)
 train_set = ISPRS_dataset(train_ids, cache=CACHE)
 train_loader = torch.utils.data.DataLoader(train_set,batch_size=BATCH_SIZE)
 
-
-# optimizer = optim.SGD(net.parameters(), lr=base_lr, momentum=0.9, weight_decay=0.0005)
 optimizer = optim.AdamW(net.parameters(), lr=1e-4, weight_decay=0.0005)
-# We define the scheduler
 scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [25, 35, 45], gamma=0.1)
 
 def test(net, test_ids, all=False, stride=WINDOW_SIZE[0], batch_size=BATCH_SIZE, window_size=WINDOW_SIZE):
@@ -216,7 +226,7 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
             acc, mf1, miou, oa_dict = test(net, test_ids, all=False, stride=Stride_Size)
             net.train()
             if acc > acc_best:
-                # torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/savemodel/ABCNet_epoch{}_{}'.format(e, acc))
+                # torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/savemodel/Ftransunet_epoch{}_{}'.format(e, acc))
                 acc_best = acc
             if use_wandb:
                 wandb.log({"epoch": e, "total_accuracy": acc, "train_loss": log_loss, "mF1": mf1, "mIoU": miou, "lr": current_lr, **oa_dict})

@@ -7,7 +7,7 @@ import math
 import torch
 import torch.nn as nn
 from torch.nn import Dropout, Softmax, Linear, LayerNorm
-from .kan import KANLinear
+# from .kan import KANLinear
 
 
 
@@ -145,61 +145,15 @@ class Attention(nn.Module):
         return attention_sx, attention_sy
 
 
-# class Mlp(nn.Module):
-#     def __init__(self, hidden_size=768, mlp_dim=3072, dropout_rate=0.1):
-#         super(Mlp, self).__init__()
-#         self.fc1 = Linear(hidden_size, mlp_dim)
-#         self.fc2 = Linear(mlp_dim, hidden_size)
-#         self.act_fn = ACT2FN["gelu"]
-#         self.dropout = Dropout(dropout_rate)
-
-#         self._init_weights()
-
-#     def _init_weights(self):
-#         nn.init.xavier_uniform_(self.fc1.weight)
-#         nn.init.xavier_uniform_(self.fc2.weight)
-#         nn.init.normal_(self.fc1.bias, std=1e-6)
-#         nn.init.normal_(self.fc2.bias, std=1e-6)
-
-#     def forward(self, x):
-#         x = self.fc1(x)
-#         x = self.act_fn(x)
-#         x = self.dropout(x)
-#         x = self.fc2(x)
-#         x = self.dropout(x)
-#         return x
-
 class Mlp(nn.Module):
     def __init__(self, hidden_size=768, mlp_dim=3072, dropout_rate=0.1):
         super(Mlp, self).__init__()
-        self.fc1 = KANLinear(
-                        hidden_size,
-                        mlp_dim,
-                        grid_size=5,
-                        spline_order=3,
-                        scale_noise=0.1,
-                        scale_base=1.0,
-                        scale_spline=1.0,
-                        base_activation=torch.nn.SiLU,
-                        grid_eps=0.02,
-                        grid_range=[-1, 1],
-                    )
-        self.fc2 = KANLinear(
-                        mlp_dim,
-                        hidden_size,
-                        grid_size=5,
-                        spline_order=3,
-                        scale_noise=0.1,
-                        scale_base=1.0,
-                        scale_spline=1.0,
-                        base_activation=torch.nn.SiLU,
-                        grid_eps=0.02,
-                        grid_range=[-1, 1],
-                    )
+        self.fc1 = Linear(hidden_size, mlp_dim)
+        self.fc2 = Linear(mlp_dim, hidden_size)
         self.act_fn = ACT2FN["gelu"]
         self.dropout = Dropout(dropout_rate)
 
-        # self._init_weights()
+        self._init_weights()
 
     def _init_weights(self):
         nn.init.xavier_uniform_(self.fc1.weight)
@@ -208,15 +162,61 @@ class Mlp(nn.Module):
         nn.init.normal_(self.fc2.bias, std=1e-6)
 
     def forward(self, x):
-        b, n = x.size(0), x.size(1)
-        x = x.view(b*n, -1)
         x = self.fc1(x)
         x = self.act_fn(x)
         x = self.dropout(x)
         x = self.fc2(x)
         x = self.dropout(x)
-        x = x.view(b, n, -1)
         return x
+
+# class Mlp(nn.Module):
+#     def __init__(self, hidden_size=768, mlp_dim=3072, dropout_rate=0.1):
+#         super(Mlp, self).__init__()
+#         self.fc1 = KANLinear(
+#                         hidden_size,
+#                         mlp_dim,
+#                         grid_size=5,
+#                         spline_order=3,
+#                         scale_noise=0.1,
+#                         scale_base=1.0,
+#                         scale_spline=1.0,
+#                         base_activation=torch.nn.SiLU,
+#                         grid_eps=0.02,
+#                         grid_range=[-1, 1],
+#                     )
+#         self.fc2 = KANLinear(
+#                         mlp_dim,
+#                         hidden_size,
+#                         grid_size=5,
+#                         spline_order=3,
+#                         scale_noise=0.1,
+#                         scale_base=1.0,
+#                         scale_spline=1.0,
+#                         base_activation=torch.nn.SiLU,
+#                         grid_eps=0.02,
+#                         grid_range=[-1, 1],
+#                     )
+#         self.act_fn = ACT2FN["gelu"]
+#         self.dropout = Dropout(dropout_rate)
+
+#         # self._init_weights()
+
+#     def _init_weights(self):
+#         nn.init.xavier_uniform_(self.fc1.weight)
+#         nn.init.xavier_uniform_(self.fc2.weight)
+#         nn.init.normal_(self.fc1.bias, std=1e-6)
+#         nn.init.normal_(self.fc2.bias, std=1e-6)
+
+#     def forward(self, x):
+#         b, n = x.size(0), x.size(1)
+#         x = x.view(b*n, -1)
+#         x = self.fc1(x)
+#         x = self.act_fn(x)
+#         x = self.dropout(x)
+#         x = self.fc2(x)
+#         x = self.dropout(x)
+#         x = x.view(b, n, -1)
+#         return x
 
 
 
@@ -269,19 +269,19 @@ class FVit(nn.Module):
         self.encoder_normd = LayerNorm(hidden_size, eps=1e-6)
 
         self.layer.append(copy.deepcopy(Block(num_head=num_head, hidden_size=hidden_size, mode='sa')))
-        # self.layer.append(copy.deepcopy(Block(num_head=num_head, hidden_size=hidden_size, mode='sa')))
-        # self.layer.append(copy.deepcopy(Block(num_head=num_head, hidden_size=hidden_size, mode='sa')))
+        self.layer.append(copy.deepcopy(Block(num_head=num_head, hidden_size=hidden_size, mode='sa')))
+        self.layer.append(copy.deepcopy(Block(num_head=num_head, hidden_size=hidden_size, mode='sa')))
 
         self.layer.append(copy.deepcopy(Block(num_head=num_head, hidden_size=hidden_size, mode='mba')))
         self.layer.append(copy.deepcopy(Block(num_head=num_head, hidden_size=hidden_size, mode='mba')))
-        # self.layer.append(copy.deepcopy(Block(num_head=num_head, hidden_size=hidden_size, mode='mba')))
-        # self.layer.append(copy.deepcopy(Block(num_head=num_head, hidden_size=hidden_size, mode='mba')))
-        # self.layer.append(copy.deepcopy(Block(num_head=num_head, hidden_size=hidden_size, mode='mba')))
-        # self.layer.append(copy.deepcopy(Block(num_head=num_head, hidden_size=hidden_size, mode='mba')))
+        self.layer.append(copy.deepcopy(Block(num_head=num_head, hidden_size=hidden_size, mode='mba')))
+        self.layer.append(copy.deepcopy(Block(num_head=num_head, hidden_size=hidden_size, mode='mba')))
+        self.layer.append(copy.deepcopy(Block(num_head=num_head, hidden_size=hidden_size, mode='mba')))
+        self.layer.append(copy.deepcopy(Block(num_head=num_head, hidden_size=hidden_size, mode='mba')))
 
         self.layer.append(copy.deepcopy(Block(num_head=num_head, hidden_size=hidden_size, mode='sa')))
-        # self.layer.append(copy.deepcopy(Block(num_head=num_head, hidden_size=hidden_size, mode='sa')))
-        # self.layer.append(copy.deepcopy(Block(num_head=num_head, hidden_size=hidden_size, mode='sa')))
+        self.layer.append(copy.deepcopy(Block(num_head=num_head, hidden_size=hidden_size, mode='sa')))
+        self.layer.append(copy.deepcopy(Block(num_head=num_head, hidden_size=hidden_size, mode='sa')))
 
     def forward(self, hidden_statesx, hidden_statesy):
         for layer_block in self.layer:
@@ -290,3 +290,7 @@ class FVit(nn.Module):
         encodedx = self.encoder_norm(hidden_statesx)
         encodedy = self.encoder_normd(hidden_statesy)
         return encodedx, encodedy  # encoderx:[b, 256, 768] encodery:[b, 256, 768]
+    
+if __name__ == "__main__":
+    net = FVit(768)
+    print(sum(p.numel() for p in net.parameters()))

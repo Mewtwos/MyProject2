@@ -14,13 +14,13 @@ from custom_repr import enable_custom_repr
 from torchinfo import summary
 enable_custom_repr()
 
-use_wandb = False
+use_wandb = True
 if use_wandb:
     config = {
         "model": "TransUNet",
     }
     wandb.init(project="FTransUNet", config=config)
-    wandb.run.name = "Unetformer-Vaihingen-有权重-adamw-withoutaux"
+    wandb.run.name = "Unetformer-Vaihingen-有权重(不加载BN权重)-adamw"
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 torch.cuda.device_count.cache_clear() 
@@ -35,7 +35,9 @@ np.random.seed(seed)
 
 #Unetformer
 net = UNetFormer(num_classes=6).cuda()
-summary(net, input_size=[(10, 3, 256, 256), (10, 1, 256, 256)])
+# state_dict = net.state_dict()
+# original_checkpoint = torch.load("/home/lvhaitao/unetformer.pth", map_location="cpu")#加载预训练模型
+# summary(net, input_size=[(10, 3, 256, 256), (10, 1, 256, 256)])
 
 params = 0
 for name, param in net.named_parameters():
@@ -126,14 +128,14 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
     iter_ = 0
     acc_best = 90.0
     log_loss = 0
-    # aux_loss = SoftCrossEntropyLoss(smooth_factor=0.05, ignore_index=255)
+    aux_loss = SoftCrossEntropyLoss(smooth_factor=0.05, ignore_index=255)
     for e in range(1, epochs + 1):
         net.train()
         for batch_idx, (data, dsm, target) in enumerate(train_loader):
             data, dsm, target = Variable(data.cuda()), Variable(dsm.cuda()), Variable(target.cuda())
             optimizer.zero_grad()
             output, aux_out = net(data, dsm)
-            loss = CrossEntropy2d(output, target, weight=weights)
+            loss = CrossEntropy2d(output, target, weight=weights) + 0.4 * aux_loss(aux_out, target)
             loss.backward()
             optimizer.step()
 
@@ -155,16 +157,16 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
 
             # if e % save_epoch == 0:
             # if iter_ % 500 == 0:
+        if scheduler is not None:
+            scheduler.step()
+            current_lr = optimizer.param_groups[0]['lr']
         if e > 20:
             net.eval()
             acc, mf1, miou, oa_dict = test(net, test_ids, all=False, stride=Stride_Size)
             net.train()
             if acc > acc_best:
-                torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/savemodel/unetformer_epoch{}_{}'.format(e, acc))
+                # torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/savemodel/unetformer_epoch{}_{}'.format(e, acc))
                 acc_best = acc
-            if scheduler is not None:
-                scheduler.step()
-                current_lr = optimizer.param_groups[0]['lr']
             if use_wandb:
                 wandb.log({"epoch": e, "total_accuracy": acc, "train_loss": log_loss, "mF1": mf1, "mIoU": miou, "lr": current_lr, **oa_dict})
             log_loss = 0

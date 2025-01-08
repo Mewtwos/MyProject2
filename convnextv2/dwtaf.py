@@ -5,7 +5,232 @@ import math
 from torch.nn import LayerNorm, Linear, Dropout
 from .torch_wavelets import DWT_2D, IDWT_2D
 
+def l2_norm(x):
+    return torch.einsum("bcn, bn->bcn", x, 1 / torch.norm(x, p=2, dim=-2))
 
+class DWTLinearAttention(nn.Module):
+    def __init__(self, in_places, scale=8, eps=1e-6, mode="sa"):
+        super(DWTLinearAttention, self).__init__()
+        self.gamma = nn.Parameter(torch.zeros(1))
+        self.gamma_y = nn.Parameter(torch.zeros(1))
+        self.gamma_cx = nn.Parameter(torch.zeros(1))
+        self.gamma_cy = nn.Parameter(torch.zeros(1))
+        self.in_places = in_places
+        self.l2_norm = l2_norm
+        self.eps = eps
+        self.mode = mode
+
+        self.query_conv = nn.Conv2d(in_channels=in_places, out_channels=in_places // scale, kernel_size=1)
+        self.key_conv = nn.Conv2d(in_channels=in_places, out_channels=in_places // scale, kernel_size=1)
+        self.value_conv = nn.Conv2d(in_channels=in_places, out_channels=in_places, kernel_size=1)
+        self.query_conv_y = nn.Conv2d(in_channels=in_places, out_channels=in_places // scale, kernel_size=1)
+        self.key_conv_y = nn.Conv2d(in_channels=in_places, out_channels=in_places // scale, kernel_size=1)
+        self.value_conv_y = nn.Conv2d(in_channels=in_places, out_channels=in_places, kernel_size=1)
+
+        # self.reduce = nn.Sequential(
+        #     nn.Conv2d(in_places, in_places // 4, kernel_size=1, padding=0, stride=1),
+        #     nn.BatchNorm2d(in_places // 4),
+        #     nn.ReLU(inplace=True),
+        # )
+        # self.reducey = nn.Sequential(
+        #     nn.Conv2d(in_places, in_places // 4, kernel_size=1, padding=0, stride=1),
+        #     nn.BatchNorm2d(in_places // 4),
+        #     nn.ReLU(inplace=True),
+        # )
+        self.dwt = DWT_2D(wave='haar')
+        self.idwt = IDWT_2D(wave='haar')
+
+    def forward(self, x, y):
+        batch_size, N, chnnels = x.shape
+        width = height = int(math.sqrt(N))
+        assert N == width * height
+        x = x.view(batch_size, chnnels, width, height)
+        y = y.view(batch_size, chnnels, width, height)
+        x_dwt = self.dwt(x)
+        y_dwt = self.dwt(y)
+        llx, lhx, hlx, hhx = torch.split(x_dwt, x.shape[1], dim=1)
+        lly, lhy, hly, hhy = torch.split(y_dwt, y.shape[1], dim=1)
+        x = llx
+        y = lly
+        width = height = height // 2
+
+        Q = self.query_conv(x).view(batch_size, -1, width * height)
+        Qy = self.query_conv_y(y).view(batch_size, -1, width * height)
+        # x = self.dwt(self.reduce(x))
+        # x = self.filter(x)
+        # idwt = self.idwt(x)
+        K = self.key_conv(x).view(batch_size, -1, width * height)
+        V = self.value_conv(x).view(batch_size, -1, width * height)
+        Ky = self.key_conv_y(y).view(batch_size, -1, width * height)
+        Vy = self.value_conv_y(y).view(batch_size, -1, width * height)
+
+        Q = self.l2_norm(Q).permute(-3, -1, -2)
+        K = self.l2_norm(K)
+        Qy = self.l2_norm(Qy).permute(-3, -1, -2)
+        Ky = self.l2_norm(Ky)
+
+        #self attention
+        if self.mode == "sa":
+            tailor_sum = 1 / (width * height + torch.einsum("bnc, bc->bn", Q, torch.sum(K, dim=-1) + self.eps))
+            value_sum = torch.einsum("bcn->bc", V).unsqueeze(-1)
+            value_sum = value_sum.expand(-1, chnnels, width * height)
+            matrix = torch.einsum('bmn, bcn->bmc', K, V)
+            matrix_sum = value_sum + torch.einsum("bnm, bmc->bcn", Q, matrix)
+            weight_value = torch.einsum("bcn, bn->bcn", matrix_sum, tailor_sum)
+            weight_value = weight_value.view(batch_size, chnnels, height, width)
+            attention = (self.gamma * weight_value).contiguous()
+
+            tailor_sumy = 1 / (width * height + torch.einsum("bnc, bc->bn", Qy, torch.sum(Ky, dim=-1) + self.eps))
+            value_sumy = torch.einsum("bcn->bc", Vy).unsqueeze(-1)
+            value_sumy = value_sumy.expand(-1, chnnels, width * height)
+            matrixy = torch.einsum('bmn, bcn->bmc', Ky, Vy)
+            matrix_sumy = value_sumy + torch.einsum("bnm, bmc->bcn", Qy, matrixy)
+            weight_valuey = torch.einsum("bcn, bn->bcn", matrix_sumy, tailor_sumy)
+            weight_valuey = weight_valuey.view(batch_size, chnnels, height, width)
+            attentiony = (self.gamma_y * weight_valuey).contiguous()
+            x_dwt = torch.cat([attention, lhx, hlx, hhx], dim=1)
+            y_dwt = torch.cat([attentiony, lhy, hly, hhy], dim=1)
+            attention = self.idwt(x_dwt)
+            attentiony = self.idwt(y_dwt)
+            attention = attention.view(batch_size, chnnels, -1).permute(0, 2, 1)
+            attentiony = attentiony.view(batch_size, chnnels, -1).permute(0, 2, 1)
+            return attention, attentiony
+        #cross attention
+        tailor_sum_cx = 1 / (width * height + torch.einsum("bnc, bc->bn", Q, torch.sum(Ky, dim=-1) + self.eps))
+        value_sum = torch.einsum("bcn->bc", Vy).unsqueeze(-1)
+        value_sum = value_sum.expand(-1, chnnels, width * height)
+        matrixy = torch.einsum('bmn, bcn->bmc', Ky, Vy)
+        matrix_sum_cx = value_sum + torch.einsum("bnm, bmc->bcn", Q, matrixy)
+        weight_value_cx = torch.einsum("bcn, bn->bcn", matrix_sum_cx, tailor_sum_cx)
+        weight_value_cx = weight_value_cx.view(batch_size, chnnels, height, width)
+        attention_cx = (self.gamma_cx * weight_value_cx).contiguous()
+
+        tailor_sum_cy = 1 / (width * height + torch.einsum("bnc, bc->bn", Qy, torch.sum(K, dim=-1) + self.eps))
+        value_sum = torch.einsum("bcn->bc", V).unsqueeze(-1)
+        value_sum = value_sum.expand(-1, chnnels, width * height)
+        matrix = torch.einsum('bmn, bcn->bmc', K, V)
+        matrix_sum_cy = value_sum + torch.einsum("bnm, bmc->bcn", Qy, matrix)
+        weight_value_cy = torch.einsum("bcn, bn->bcn", matrix_sum_cy, tailor_sum_cy)
+        weight_value_cy = weight_value_cy.view(batch_size, chnnels, height, width)
+        attention_cy = (self.gamma_cy * weight_value_cy).contiguous()
+
+        fuse_lh = torch.max(lhx, lhy)
+        fuse_hl = torch.max(hlx, hly)
+        fuse_hh = torch.max(hhx, hhy)
+        final_x = torch.cat([attention_cx, fuse_lh, fuse_hl, fuse_hh], dim=1)
+        final_y = torch.cat([attention_cy, fuse_lh, fuse_hl, fuse_hh], dim=1)
+        final_x = self.idwt(final_x)
+        final_y = self.idwt(final_y)
+        final_x = final_x.view(batch_size, chnnels, -1).permute(0, 2, 1)
+        final_y = final_y.view(batch_size, chnnels, -1).permute(0, 2, 1)
+        return final_x, final_y
+    
+class LinearAttention(nn.Module):
+    def __init__(self, in_places, scale=8, eps=1e-6, mode="sa"):
+        super(LinearAttention, self).__init__()
+        self.gamma = nn.Parameter(torch.zeros(1))
+        self.gamma_y = nn.Parameter(torch.zeros(1))
+        self.gamma_cx = nn.Parameter(torch.zeros(1))
+        self.gamma_cy = nn.Parameter(torch.zeros(1))
+        self.in_places = in_places
+        self.l2_norm = l2_norm
+        self.eps = eps
+        self.mode = mode
+
+        self.query_conv = nn.Conv2d(in_channels=in_places, out_channels=in_places // scale, kernel_size=1)
+        self.key_conv = nn.Conv2d(in_channels=in_places, out_channels=in_places // scale, kernel_size=1)
+        self.value_conv = nn.Conv2d(in_channels=in_places, out_channels=in_places, kernel_size=1)
+        self.query_conv_y = nn.Conv2d(in_channels=in_places, out_channels=in_places // scale, kernel_size=1)
+        self.key_conv_y = nn.Conv2d(in_channels=in_places, out_channels=in_places // scale, kernel_size=1)
+        self.value_conv_y = nn.Conv2d(in_channels=in_places, out_channels=in_places, kernel_size=1)
+
+        if self.mode == "ca":
+            self.wx1 = torch.nn.Parameter(torch.tensor(0.5, dtype=torch.float32), requires_grad=True)
+            self.wx2 = torch.nn.Parameter(torch.tensor(0.5, dtype=torch.float32), requires_grad=True)
+            self.wy1 = torch.nn.Parameter(torch.tensor(0.5, dtype=torch.float32), requires_grad=True)
+            self.wy2 = torch.nn.Parameter(torch.tensor(0.5, dtype=torch.float32), requires_grad=True)
+        # self.reduce = nn.Sequential(
+        #     nn.Conv2d(in_places, in_places // 4, kernel_size=1, padding=0, stride=1),
+        #     nn.BatchNorm2d(in_places // 4),
+        #     nn.ReLU(inplace=True),
+        # )
+        # self.dwt = DWT_2D(wave='haar')
+        # self.idwt = IDWT_2D(wave='haar')
+        # self.filter = nn.Sequential(
+        #     nn.Conv2d(in_places, in_places, kernel_size=3, padding=1, stride=1, groups=1),
+        #     nn.BatchNorm2d(in_places),
+        #     nn.ReLU(inplace=True),
+        # )
+        # self.proj = nn.Linear(in_places + in_places // 4, in_places)
+
+    def forward(self, x, y):
+        # Apply the feature map to the queries and keys
+        # batch_size, chnnels, width, height = x.shape
+        batch_size, N, chnnels = x.shape
+        width = height = int(math.sqrt(N))
+        assert N == width * height
+        x = x.view(batch_size, chnnels, width, height)
+        y = y.view(batch_size, chnnels, width, height)
+
+        Q = self.query_conv(x).view(batch_size, -1, width * height)
+        Qy = self.query_conv_y(y).view(batch_size, -1, width * height)
+        # x = self.dwt(self.reduce(x))
+        # x = self.filter(x)
+        # idwt = self.idwt(x)
+        K = self.key_conv(x).view(batch_size, -1, width * height)
+        V = self.value_conv(x).view(batch_size, -1, width * height)
+        Ky = self.key_conv_y(y).view(batch_size, -1, width * height)
+        Vy = self.value_conv_y(y).view(batch_size, -1, width * height)
+
+        Q = self.l2_norm(Q).permute(-3, -1, -2)
+        K = self.l2_norm(K)
+        Qy = self.l2_norm(Qy).permute(-3, -1, -2)
+        Ky = self.l2_norm(Ky)
+
+        #self attention
+        tailor_sum = 1 / (width * height + torch.einsum("bnc, bc->bn", Q, torch.sum(K, dim=-1) + self.eps))
+        value_sum = torch.einsum("bcn->bc", V).unsqueeze(-1)
+        value_sum = value_sum.expand(-1, chnnels, width * height)
+        matrix = torch.einsum('bmn, bcn->bmc', K, V)
+        matrix_sum = value_sum + torch.einsum("bnm, bmc->bcn", Q, matrix)
+        weight_value = torch.einsum("bcn, bn->bcn", matrix_sum, tailor_sum)
+        weight_value = weight_value.view(batch_size, chnnels, height, width)
+        attention = (self.gamma * weight_value).contiguous()
+
+        tailor_sumy = 1 / (width * height + torch.einsum("bnc, bc->bn", Qy, torch.sum(Ky, dim=-1) + self.eps))
+        value_sumy = torch.einsum("bcn->bc", Vy).unsqueeze(-1)
+        value_sumy = value_sumy.expand(-1, chnnels, width * height)
+        matrixy = torch.einsum('bmn, bcn->bmc', Ky, Vy)
+        matrix_sumy = value_sumy + torch.einsum("bnm, bmc->bcn", Qy, matrixy)
+        weight_valuey = torch.einsum("bcn, bn->bcn", matrix_sumy, tailor_sumy)
+        weight_valuey = weight_valuey.view(batch_size, chnnels, height, width)
+        attentiony = (self.gamma_y * weight_valuey).contiguous()
+        #cross attention
+        if self.mode == "sa":
+            attention = attention.view(batch_size, chnnels, width * height).permute(0, 2, 1)
+            attentiony = attentiony.view(batch_size, chnnels, width * height).permute(0, 2, 1)
+            return attention, attentiony
+        tailor_sum_cx = 1 / (width * height + torch.einsum("bnc, bc->bn", Q, torch.sum(Ky, dim=-1) + self.eps))
+        matrix_sum_cx = value_sum + torch.einsum("bnm, bmc->bcn", Q, matrixy)
+        weight_value_cx = torch.einsum("bcn, bn->bcn", matrix_sum_cx, tailor_sum_cx)
+        weight_value_cx = weight_value_cx.view(batch_size, chnnels, height, width)
+        attention_cx = (self.gamma_cx * weight_value_cx).contiguous()
+
+        tailor_sum_cy = 1 / (width * height + torch.einsum("bnc, bc->bn", Qy, torch.sum(K, dim=-1) + self.eps))
+        matrix_sum_cy = value_sumy + torch.einsum("bnm, bmc->bcn", Qy, matrix)
+        weight_value_cy = torch.einsum("bcn, bn->bcn", matrix_sum_cy, tailor_sum_cy)
+        weight_value_cy = weight_value_cy.view(batch_size, chnnels, height, width)
+        attention_cy = (self.gamma_cy * weight_value_cy).contiguous()
+
+        final_x = attention * self.wx1 + attention_cx * self.wx2
+        final_y = attentiony * self.wy1 + attention_cy * self.wy2
+        final_x = final_x.view(batch_size, chnnels, width * height).permute(0, 2, 1)
+        final_y = final_y.view(batch_size, chnnels, width * height).permute(0, 2, 1)
+        # attention = attention.view(batch_size, width * height, chnnels)
+        # idwt = idwt.view(batch_size, width * height, -1)
+        # attention = self.proj(torch.cat([attention, idwt], dim=-1)).view(batch_size, chnnels, width, height)
+        return final_x, final_y
+    
 class WaveAttention(nn.Module):
     def __init__(self, sr_ratio=1, dim=512, num_heads=8):
         super().__init__()
@@ -155,7 +380,7 @@ class Mlp(nn.Module):
 
 
 class Block(nn.Module):
-    def __init__(self, num_head=8, hidden_size=512):
+    def __init__(self, num_head=8, hidden_size=512, mode="sa"):
         super(Block, self).__init__()
         self.hidden_size = hidden_size
         self.attention_norm = LayerNorm(hidden_size, eps=1e-6)
@@ -164,7 +389,8 @@ class Block(nn.Module):
         self.ffn_normd = LayerNorm(hidden_size, eps=1e-6)
         self.ffn = Mlp(hidden_size=hidden_size)
         self.ffnd = Mlp(hidden_size=hidden_size)
-        self.attn = WaveAttention(num_heads=num_head, dim=hidden_size)
+        # self.attn = WaveAttention(num_heads=num_head, dim=hidden_size)
+        self.attn = LinearAttention(in_places=hidden_size, mode=mode)
 
     def forward(self, x, y):
         hx = x
@@ -190,7 +416,13 @@ class DWTAF(nn.Module):
     def __init__(self, num_layers=1, num_heads=16, hidden_size=512):
         super(DWTAF, self).__init__()
         self.num_layers = num_layers
-        self.blocks = nn.ModuleList([Block(num_head=num_heads, hidden_size=hidden_size) for _ in range(num_layers)])
+        # self.blocks = nn.ModuleList([Block(num_head=num_heads, hidden_size=hidden_size) for _ in range(num_layers)])
+        self.blocks = nn.ModuleList()
+        for i in range(num_layers):
+            if i < 3 or i > 8:
+                self.blocks.append(Block(num_head=num_heads, hidden_size=hidden_size, mode="sa"))
+            else:
+                self.blocks.append(Block(num_head=num_heads, hidden_size=hidden_size, mode="ca"))
         self.normx = LayerNorm(hidden_size, eps=1e-6)
         self.normy = LayerNorm(hidden_size, eps=1e-6)
 
@@ -200,6 +432,5 @@ class DWTAF(nn.Module):
         x = self.normx(x)
         y = self.normy(y)
         return x + y
-
 
 
