@@ -390,7 +390,8 @@ class Block(nn.Module):
         self.ffn = Mlp(hidden_size=hidden_size)
         self.ffnd = Mlp(hidden_size=hidden_size)
         # self.attn = WaveAttention(num_heads=num_head, dim=hidden_size)
-        self.attn = LinearAttention(in_places=hidden_size, mode=mode)
+        # self.attn = LinearAttention(in_places=hidden_size, mode=mode)
+        self.attn = DWTLinearAttention(in_places=hidden_size, mode=mode)
 
     def forward(self, x, y):
         hx = x

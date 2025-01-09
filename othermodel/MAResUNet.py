@@ -5,6 +5,17 @@ import torch.nn.functional as F
 from torch.nn import Module, Conv2d, Parameter, Softmax
 
 from functools import partial
+import torch
+
+original_repr = torch.Tensor.__repr__
+
+
+def custom_repr(self):
+    return f"{{Tensor:{tuple(self.shape)}, {self.device}, {self.dtype}}} {original_repr(self)}"
+
+
+def enable_custom_repr():
+    torch.Tensor.__repr__ = custom_repr
 
 
 nonlinearity = partial(F.relu, inplace=True)
@@ -207,10 +218,11 @@ class MAResUNet(nn.Module):
 if __name__ == '__main__':
     import os
     os.environ['TORCH_HOME']='/home/lvhaitao'
+    enable_custom_repr()
 
     num_classes = 10
     in_batch, inchannel, in_h, in_w = 10, 3, 256, 256
     x = torch.randn(in_batch, inchannel, in_h, in_w)
     net = MAResUNet(3)
-    out = net(x)
+    out = net(x, None)
     print(out.shape)

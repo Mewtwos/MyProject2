@@ -17,20 +17,20 @@ import wandb
 # from othermodel.rs3mamba import RS3Mamba, load_pretrained_ckpt
 from othermodel.Transunet import VisionTransformer as TransUNet
 # from othermodel.Transunet import CONFIGS as CONFIGS_ViT_seg
-from convnextv2 import convnextv2_unet_modify
+from convnextv2 import convnextv2_unet_modify, convnextv2_unet_modify2
 from othermodel.MAResUNet import MAResUNet
 from othermodel.ABCNet import ABCNet
-from convnextv2.helpers import load_custom_checkpoint
+from convnextv2.helpers import load_custom_checkpoint, load_imagenet_checkpoint
 from custom_repr import enable_custom_repr
 enable_custom_repr()
 
-use_wandb = True
+use_wandb = False
 if use_wandb:
     config = {
         "model": "TransUNet",
     }
     wandb.init(project="FTransUNet", config=config)
-    wandb.run.name = "convnextv2-tiny-Vaihingen-Imagenet权重(模型使用bn)-dwtaf12layer(LAM)6sa6ca"
+    wandb.run.name = "convnextv2-tiny-Vaihingen-无权重-modify2"
     # wandb.run.name = "Ftransunet-Vaihingen-有权重"
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
@@ -78,7 +78,15 @@ np.random.seed(seed)
 # net.load_from(weights=np.load(config_vit.pretrained_path))
 
 #convnextv2_unet_modify
-net = convnextv2_unet_modify.__dict__["convnextv2_unet_tiny"](
+# net = convnextv2_unet_modify.__dict__["convnextv2_unet_tiny"](
+#             num_classes=6,
+#             drop_path_rate=0.1,
+#             head_init_scale=0.001,
+#             patch_size=16,  ###原来是16
+#             use_orig_stem=False,
+#             in_chans=3,
+#         ).cuda()
+net = convnextv2_unet_modify2.__dict__["convnextv2_unet_tiny"](
             num_classes=6,
             drop_path_rate=0.1,
             head_init_scale=0.001,
@@ -86,7 +94,8 @@ net = convnextv2_unet_modify.__dict__["convnextv2_unet_tiny"](
             use_orig_stem=False,
             in_chans=3,
         ).cuda()
-net = load_custom_checkpoint(net, "/home/lvhaitao/convnextv2_tiny_1k_224_fcmae.pt")
+# net = load_custom_checkpoint(net, "/home/lvhaitao/convnextv2_tiny_1k_224_fcmae.pt")
+net = load_imagenet_checkpoint(net, "/home/lvhaitao/convnextv2_tiny_1k_224_fcmae.pt")
 print("预训练权重加载完成")
 #MAResUNet
 # net = MAResUNet(num_classes=6).cuda()
@@ -221,7 +230,7 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
         if scheduler is not None:
             scheduler.step()
             current_lr = optimizer.param_groups[0]['lr']
-        if e > 30:
+        if e > 25:
             net.eval()
             acc, mf1, miou, oa_dict = test(net, test_ids, all=False, stride=Stride_Size)
             net.train()

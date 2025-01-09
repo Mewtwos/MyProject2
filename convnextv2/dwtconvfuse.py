@@ -10,12 +10,6 @@ class DWTconvfuse(nn.Module):
         self.dwt = DWT_2D(wave='haar')
         self.idwt = IDWT_2D(wave='haar')
         self.finalconv = nn.Sequential(nn.Conv2d(channels // reduction, channels, kernel_size=1, bias=False))
-        # self.attention = nn.Sequential(
-        #     nn.Conv2d(channels // reduction * 4, channels // reduction, kernel_size=1, bias=False),
-        #     nn.ReLU(inplace=True),
-        #     nn.Conv2d(channels // reduction, channels // reduction * 4, kernel_size=1, bias=False),
-        #     nn.Sigmoid()
-        # )
 
     def forward(self, x, y):
         x1 = self.convx(x)

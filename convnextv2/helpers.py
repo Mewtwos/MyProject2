@@ -1,3 +1,4 @@
+import re
 import torch
 from collections import OrderedDict
 import math
@@ -169,4 +170,41 @@ def load_custom_checkpoint(model, pretrained_path):
     checkpoint_model = remap_checkpoint_keys(checkpoint_model)
     load_state_dict(model, checkpoint_model, prefix="")
 
+    return model
+
+def modify_string(input_str):
+    # 使用正则表达式匹配 stages.n.n.xxx.xxx 格式的字符串
+    pattern = r"^(stages\.\d\.\d\.)"
+
+    # 替换为 "stages.n.n.blockx" 的形式
+    modified_str1 = re.sub(pattern, r"\1blockx.", input_str)
+    modified_str2 = re.sub(pattern, r"\1blocky.", input_str)
+
+    return modified_str1, modified_str2
+
+def load_imagenet_checkpoint(model, pretrained_model):
+    checkpoint = torch.load(pretrained_model, map_location="cpu")#加载预训练模型
+
+    print("Load pre-trained checkpoint from: %s" % pretrained_model)
+    checkpoint_model = checkpoint["model"] if "model" in checkpoint else checkpoint
+    state_dict = model.state_dict()
+
+    #remap keys
+    new_ckpt = OrderedDict()
+    for k, v in checkpoint_model.items():
+        if "downsample_layers" in k:
+            new_ckpt[k] = v
+            new_k = k.replace("downsample_layers", "downsample_layers2")
+            new_ckpt[new_k] = v
+            continue
+        if "stages" in k:
+            k1, k2 = modify_string(k)
+            new_ckpt[k1] = v
+            new_ckpt[k2] = v
+            continue
+    for k, v in new_ckpt.items():
+        if "grn" in k:
+            new_ckpt[k] = v.unsqueeze(0).unsqueeze(1)
+    load_state_dict(model, new_ckpt, prefix="")
+    
     return model
