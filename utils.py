@@ -16,7 +16,7 @@ WINDOW_SIZE = (256, 256) # Patch size
 
 STRIDE = 32 # Stride for testing
 IN_CHANNELS = 3 # Number of input channels (e.g. RGB)
-FOLDER = "/home/lvhaitao/dataset/" # Replace with your "/path/to/the/ISPRS/dataset/folder/"
+FOLDER = "/data/lvhaitao/dataset/" # Replace with your "/path/to/the/ISPRS/dataset/folder/"
 BATCH_SIZE = 10 # Number of samples in a mini-batch
 
 LABELS = ["roads", "buildings", "low veg.", "trees", "cars", "clutter"] # Label names
@@ -35,7 +35,7 @@ LABEL_FOLDER = MAIN_FOLDER + 'gts_for_participants/top_mosaic_09cm_area{}.tif'
 ERODED_FOLDER = MAIN_FOLDER + 'gts_eroded_for_participants/top_mosaic_09cm_area{}_noBoundary.tif'
 
 # train_ids = ['6_10', '7_10', '2_12', '3_11', '2_10', '7_8', '5_10', '3_12', '5_12', '7_11', '7_9', '6_9', '7_7',
-#              '4_12', '6_8', '6_12', '6_7', '4_11']
+#             '4_12', '6_8', '6_12', '6_7', '4_11']
 # test_ids = ['4_10', '5_11', '2_11', '3_10', '6_11', '7_12']
 # DATASET = 'Potsdam'
 # Stride_Size = 128 # for quickly training

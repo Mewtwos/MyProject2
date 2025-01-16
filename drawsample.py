@@ -1,6 +1,4 @@
 from utils import *
-import torch
-from torchvision import transforms
 
 data_files = [DATA_FOLDER.format(id) for id in train_ids]
 dsm_files = [DSM_FOLDER.format(id) for id in train_ids]

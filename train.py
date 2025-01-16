@@ -21,17 +21,18 @@ from convnextv2 import convnextv2_unet_modify, convnextv2_unet_modify2
 from othermodel.MAResUNet import MAResUNet
 from othermodel.ABCNet import ABCNet
 from convnextv2.helpers import load_custom_checkpoint, load_imagenet_checkpoint
+from othermodel.RFNet import RFNet, resnet18
 from custom_repr import enable_custom_repr
 enable_custom_repr()
 
-use_wandb = False
+use_wandb = True
 if use_wandb:
     config = {
         "model": "TransUNet",
     }
     wandb.init(project="FTransUNet", config=config)
-    wandb.run.name = "convnextv2-tiny-Vaihingen-无权重-modify2"
-    # wandb.run.name = "Ftransunet-Vaihingen-有权重"
+    # wandb.run.name = "convnextv2-tiny-Potsdam-有权重-modify2(decoder64)"
+    wandb.run.name = "RFNet-Vaihingen-有权重"
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 torch.cuda.device_count.cache_clear() 
@@ -86,21 +87,22 @@ np.random.seed(seed)
 #             use_orig_stem=False,
 #             in_chans=3,
 #         ).cuda()
-net = convnextv2_unet_modify2.__dict__["convnextv2_unet_tiny"](
-            num_classes=6,
-            drop_path_rate=0.1,
-            head_init_scale=0.001,
-            patch_size=16,  ###原来是16
-            use_orig_stem=False,
-            in_chans=3,
-        ).cuda()
+# net = convnextv2_unet_modify2.__dict__["convnextv2_unet_tiny"](
+#             num_classes=6,
+#             drop_path_rate=0.1,
+#             head_init_scale=0.001,
+#             patch_size=16,  ###原来是16
+#             use_orig_stem=False,
+#             in_chans=3,
+#         ).cuda()
 # net = load_custom_checkpoint(net, "/home/lvhaitao/convnextv2_tiny_1k_224_fcmae.pt")
-net = load_imagenet_checkpoint(net, "/home/lvhaitao/convnextv2_tiny_1k_224_fcmae.pt")
-print("预训练权重加载完成")
+# net = load_imagenet_checkpoint(net, "/home/lvhaitao/convnextv2_tiny_1k_224_fcmae.pt")
+# print("预训练权重加载完成")
+
 #MAResUNet
-# net = MAResUNet(num_classes=6).cuda()
-# state_dict = net.state_dict()
-# pretrained_dict = torch.load("/home/lvhaitao/.cache/torch/hub/checkpoints/resnet34-b627a593.pth")
+#net = MAResUNet(num_classes=6).cuda()
+#state_dict = net.state_dict()
+#pretrained_dict = torch.load("/home/lvhaitao/.cache/torch/hub/checkpoints/resnet34-b627a593.pth")
 
 #ABCNet
 # net = ABCNet(6).cuda()
@@ -112,6 +114,11 @@ print("预训练权重加载完成")
 # config_vit.patches.grid = (int(256 / 16), int(256 / 16))
 # net = ViT_seg(config_vit, img_size=256, num_classes=6).cuda()
 # net.load_from(weights=np.load(config_vit.pretrained_path))
+
+#RFNet
+resnet = resnet18(pretrained=True, efficient=False, use_bn=True)
+net = RFNet(resnet, num_classes=6, use_bn=True).cuda()
+
 
 params = 0
 for name, param in net.named_parameters():
@@ -230,12 +237,12 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
         if scheduler is not None:
             scheduler.step()
             current_lr = optimizer.param_groups[0]['lr']
-        if e > 25:
+        if e > 30:
             net.eval()
             acc, mf1, miou, oa_dict = test(net, test_ids, all=False, stride=Stride_Size)
             net.train()
             if acc > acc_best:
-                # torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/savemodel/Ftransunet_epoch{}_{}'.format(e, acc))
+                torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/savemodel/RFNet_Vaihingen_epoch{}_{}'.format(e, acc))
                 acc_best = acc
             if use_wandb:
                 wandb.log({"epoch": e, "total_accuracy": acc, "train_loss": log_loss, "mF1": mf1, "mIoU": miou, "lr": current_lr, **oa_dict})
