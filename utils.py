@@ -24,26 +24,26 @@ N_CLASSES = len(LABELS) # Number of classes
 WEIGHTS = torch.ones(N_CLASSES) # Weights for class balancing
 CACHE = True # Store the dataset in-memory
 
-train_ids = ['1', '3', '23', '26', '7', '11', '13', '28', '17', '32', '34', '37']
-test_ids = ['5', '21', '15', '30']
-DATASET = 'Vaihingen'
-Stride_Size = 32
-MAIN_FOLDER = FOLDER + 'Vaihingen/'
-DATA_FOLDER = MAIN_FOLDER + 'top/top_mosaic_09cm_area{}.tif'
-DSM_FOLDER = MAIN_FOLDER + 'dsm/dsm_09cm_matching_area{}.tif'
-LABEL_FOLDER = MAIN_FOLDER + 'gts_for_participants/top_mosaic_09cm_area{}.tif'
-ERODED_FOLDER = MAIN_FOLDER + 'gts_eroded_for_participants/top_mosaic_09cm_area{}_noBoundary.tif'
+# train_ids = ['1', '3', '23', '26', '7', '11', '13', '28', '17', '32', '34', '37']
+# test_ids = ['5', '21', '15', '30']
+# DATASET = 'Vaihingen'
+# Stride_Size = 32
+# MAIN_FOLDER = FOLDER + 'Vaihingen/'
+# DATA_FOLDER = MAIN_FOLDER + 'top/top_mosaic_09cm_area{}.tif'
+# DSM_FOLDER = MAIN_FOLDER + 'dsm/dsm_09cm_matching_area{}.tif'
+# LABEL_FOLDER = MAIN_FOLDER + 'gts_for_participants/top_mosaic_09cm_area{}.tif'
+# ERODED_FOLDER = MAIN_FOLDER + 'gts_eroded_for_participants/top_mosaic_09cm_area{}_noBoundary.tif'
 
-# train_ids = ['6_10', '7_10', '2_12', '3_11', '2_10', '7_8', '5_10', '3_12', '5_12', '7_11', '7_9', '6_9', '7_7',
-#             '4_12', '6_8', '6_12', '6_7', '4_11']
-# test_ids = ['4_10', '5_11', '2_11', '3_10', '6_11', '7_12']
-# DATASET = 'Potsdam'
-# Stride_Size = 128 # for quickly training
-# MAIN_FOLDER = FOLDER + 'Potsdam/'
-# DATA_FOLDER = MAIN_FOLDER + '4_Ortho_RGBIR/top_potsdam_{}_RGBIR.tif'
-# DSM_FOLDER = MAIN_FOLDER + '1_DSM_normalisation/dsm_potsdam_{}_normalized_lastools.jpg'
-# LABEL_FOLDER = MAIN_FOLDER + '5_Labels_for_participants/top_potsdam_{}_label.tif'
-# ERODED_FOLDER = MAIN_FOLDER + '5_Labels_for_participants_no_Boundary/top_potsdam_{}_label_noBoundary.tif'
+train_ids = ['6_10', '7_10', '2_12', '3_11', '2_10', '7_8', '5_10', '3_12', '5_12', '7_11', '7_9', '6_9', '7_7',
+            '4_12', '6_8', '6_12', '6_7', '4_11']
+test_ids = ['4_10', '5_11', '2_11', '3_10', '6_11', '7_12']
+DATASET = 'Potsdam'
+Stride_Size = 128 # for quickly training
+MAIN_FOLDER = FOLDER + 'Potsdam/'
+DATA_FOLDER = MAIN_FOLDER + '4_Ortho_RGBIR/top_potsdam_{}_RGBIR.tif'
+DSM_FOLDER = MAIN_FOLDER + '1_DSM_normalisation/dsm_potsdam_{}_normalized_lastools.jpg'
+LABEL_FOLDER = MAIN_FOLDER + '5_Labels_for_participants/top_potsdam_{}_label.tif'
+ERODED_FOLDER = MAIN_FOLDER + '5_Labels_for_participants_no_Boundary/top_potsdam_{}_label_noBoundary.tif'
 
 # ISPRS color palette
 # Let's define the standard ISPRS color palette

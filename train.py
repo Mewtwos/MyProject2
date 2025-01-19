@@ -2,7 +2,7 @@ import numpy as np
 from tqdm import tqdm
 import time
 import torch
-# import torch.nn as nn
+import torch.nn as nn
 import torch.optim as optim
 import torch.optim.lr_scheduler
 import torch.nn.init
@@ -22,19 +22,22 @@ from othermodel.MAResUNet import MAResUNet
 from othermodel.ABCNet import ABCNet
 from convnextv2.helpers import load_custom_checkpoint, load_imagenet_checkpoint
 from othermodel.RFNet import RFNet, resnet18
+from othermodel.ESANet import ESANet
+from othermodel.ACNet import ACNet
+from othermodel.SAGate import DeepLab, init_weight
 from custom_repr import enable_custom_repr
 enable_custom_repr()
 
 use_wandb = True
 if use_wandb:
     config = {
-        "model": "TransUNet",
+        "model": "MFFNet",
     }
     wandb.init(project="FTransUNet", config=config)
-    # wandb.run.name = "convnextv2-tiny-Potsdam-有权重-modify2(decoder64)"
-    wandb.run.name = "RFNet-Vaihingen-有权重"
+    # wandb.run.name = "convnextv2-tiny-Vaihingen-有权重-modify2"
+    wandb.run.name = "SAGate-Potsdam-有权重"
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 torch.cuda.device_count.cache_clear() 
 from pynvml import *
 nvmlInit()
@@ -91,12 +94,11 @@ np.random.seed(seed)
 #             num_classes=6,
 #             drop_path_rate=0.1,
 #             head_init_scale=0.001,
-#             patch_size=16,  ###原来是16
+#             patch_size=16,  
 #             use_orig_stem=False,
 #             in_chans=3,
 #         ).cuda()
-# net = load_custom_checkpoint(net, "/home/lvhaitao/convnextv2_tiny_1k_224_fcmae.pt")
-# net = load_imagenet_checkpoint(net, "/home/lvhaitao/convnextv2_tiny_1k_224_fcmae.pt")
+# net = load_imagenet_checkpoint(net, "/home/lvhaitao/pretrained_model/convnextv2_tiny_1k_224_fcmae.pt")
 # print("预训练权重加载完成")
 
 #MAResUNet
@@ -116,8 +118,31 @@ np.random.seed(seed)
 # net.load_from(weights=np.load(config_vit.pretrained_path))
 
 #RFNet
-resnet = resnet18(pretrained=True, efficient=False, use_bn=True)
-net = RFNet(resnet, num_classes=6, use_bn=True).cuda()
+# resnet = resnet18(pretrained=True, efficient=False, use_bn=True)
+# net = RFNet(resnet, num_classes=6, use_bn=True).cuda()
+
+# ESANet
+# net = ESANet(
+#     height=256,
+#     width=256,
+#     num_classes=6,
+#     pretrained_on_imagenet=True,
+#     pretrained_dir="/home/lvhaitao/pretrained_model",
+#     encoder_rgb="resnet34",
+#     encoder_depth="resnet34",
+#     encoder_block="NonBottleneck1D",
+#     nr_decoder_blocks=[3, 3, 3],
+#     channels_decoder=[512, 256, 128],
+#     upsampling="learned-3x3-zeropad"
+# ).cuda()
+
+# ACNet
+# net = ACNet(num_class=6, pretrained=True).cuda()
+
+# SAGate
+pretrained_model = '/home/lvhaitao/resnet101_v1c.pth'
+net = DeepLab(6, pretrained_model=pretrained_model, norm_layer=nn.BatchNorm2d).cuda()
+init_weight(net.business_layer, nn.init.kaiming_normal_,nn.BatchNorm2d, 1e-5, 0.1,mode='fan_in', nonlinearity='relu')
 
 
 params = 0
@@ -204,7 +229,7 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
 
     # criterion = nn.NLLLoss2d(weight=weights)
     iter_ = 0
-    acc_best = 90.0
+    acc_best = 89.0
     log_loss = 0
     for e in range(1, epochs + 1):
         net.train()
@@ -232,8 +257,6 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
 
             del (data, target, loss)
 
-            # if e % save_epoch == 0:
-            # if iter_ % 500 == 0:
         if scheduler is not None:
             scheduler.step()
             current_lr = optimizer.param_groups[0]['lr']
@@ -242,7 +265,7 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
             acc, mf1, miou, oa_dict = test(net, test_ids, all=False, stride=Stride_Size)
             net.train()
             if acc > acc_best:
-                torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/savemodel/RFNet_Vaihingen_epoch{}_{}'.format(e, acc))
+                torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/savemodel/SAGate_Potsdam_epoch{}_{}'.format(e, acc))
                 acc_best = acc
             if use_wandb:
                 wandb.log({"epoch": e, "total_accuracy": acc, "train_loss": log_loss, "mF1": mf1, "mIoU": miou, "lr": current_lr, **oa_dict})

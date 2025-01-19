@@ -24,6 +24,7 @@ class WF(nn.Module):
     def __init__(self, in_channels=128, decode_channels=128, eps=1e-8):
         super(WF, self).__init__()
         self.pre_conv = Conv(in_channels, decode_channels, kernel_size=1)
+        # self.pre_conv = nn.Identity()
 
         self.weights = nn.Parameter(torch.ones(2, dtype=torch.float32), requires_grad=True)
         self.eps = eps
@@ -192,6 +193,7 @@ class FeatureRefinementHead(nn.Module):
     def __init__(self, in_channels=64, decode_channels=64):
         super().__init__()
         self.pre_conv = Conv(in_channels, decode_channels, kernel_size=1)
+        # self.pre_conv = nn.Identity()
 
         self.weights = nn.Parameter(torch.ones(2, dtype=torch.float32), requires_grad=True)
         self.eps = 1e-8
@@ -234,6 +236,7 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__()
 
         self.pre_conv = ConvBN(encoder_channels[-1], decode_channels, kernel_size=1)
+        # self.pre_conv = nn.Identity()
         self.b4 = Block(dim=decode_channels, num_heads=8, window_size=window_size)
 
         self.b3 = Block(dim=decode_channels, num_heads=8, window_size=window_size)

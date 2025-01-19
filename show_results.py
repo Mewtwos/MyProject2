@@ -12,10 +12,57 @@ from othermodel.Transunet import VisionTransformer as TransUNet
 from othermodel.ukan import UKAN
 from othermodel.unetformer import UNetFormer
 # from othermodel.rs3mamba import RS3Mamba, load_pretrained_ckpt
-from convnextv2 import convnextv2_unet_modify2
+# from convnextv2 import convnextv2_unet_modify2
+from othermodel.ACNet import ACNet
+from othermodel.RFNet import RFNet, resnet18
+from othermodel.ESANet import ESANet
+from othermodel.SAGate import DeepLab, init_weight
+import torch.nn as nn
 
-dataset_dir = "/home/lvhaitao/Vaihingen_show"
-# dataset_dir = "/home/lvhaitao/Potsdam_show"
+
+vaihingen_data = {}
+vaihingen_dsm = {}
+patch_size = 256
+# dataset = "Vaihingen"
+dataset = "Potsdam"
+
+
+if dataset == "Vaihingen":
+    index_dict = {"1":30, "2":30, "3":30, "4":30}
+    x_dict = {"1":2096, "2":1530, "3":510, "4":877}
+    y_dict = {"1":1441, "2":544, "3":1601, "4":1244}
+    dataset_dir = "/data/lvhaitao/dataset/Vaihingen/"
+else:
+    index_dict = {"1":"3_10", "2":"3_10", "3":"3_10", "4":"3_10"}
+    x_dict = {"1":4462, "2":853, "3":3406, "4":4747}
+    y_dict = {"1":1947, "2":5138, "3":2800, "4":2231}
+    dataset_dir = "/data/lvhaitao/dataset/Potsdam/"
+
+for i in range(4):
+    x1 = x_dict[str(i+1)]
+    y1 = y_dict[str(i+1)]
+    x2 = x1 + patch_size
+    y2 = y1 + patch_size
+    index = index_dict[str(i+1)]
+    if dataset == "Vaihingen":
+        data = io.imread(dataset_dir+'top/top_mosaic_09cm_area{}.tif'.format(index))
+        data = 1 / 255 * np.asarray(data.transpose((2, 0, 1)), dtype='float32')
+        dsm = np.asarray(io.imread(dataset_dir+'dsm/dsm_09cm_matching_area{}.tif'.format(index)), dtype='float32')
+    else:
+        data = io.imread(dataset_dir+'4_Ortho_RGBIR/top_potsdam_{}_RGBIR.tif'.format(index))[:, :, :3].transpose((2, 0, 1))
+        data = 1 / 255 * np.asarray(data, dtype='float32')
+        dsm = np.asarray(io.imread(dataset_dir+'1_DSM_normalisation/dsm_potsdam_{}_normalized_lastools.jpg'.format(index)), dtype='float32')
+    min = np.min(dsm)
+    max = np.max(dsm)
+    dsm = (dsm - min) / (max - min)
+
+    data_p = data[:, x1:x2, y1:y2]
+    dsm_p = dsm[x1:x2, y1:y2]
+    vaihingen_data[str(i+1)] = data_p
+    vaihingen_dsm[str(i+1)] = dsm_p
+
+
+
 
 
 # net = ABCNet(6).cuda()
@@ -43,21 +90,49 @@ dataset_dir = "/home/lvhaitao/Vaihingen_show"
 # net.load_state_dict(torch.load("E:/训练的模型/Vaingen/UKAN_epoch47_90.2728950498298"))
 
 # net = UNetFormer(num_classes=6,pretrained=False).cuda()
-# net.load_state_dict(torch.load("E:/训练的模型/Vaingen/unetformer_epoch50_91.6432166560365"))
+# net.load_state_dict(torch.load("/home/lvhaitao/unetformer_epoch50_91.6432166560365"))
 # net.load_state_dict(torch.load("E:/训练的模型/Potsdam/unetformer_epoch44_90.46410366807537-potsdam"))
 
-net = convnextv2_unet_modify2.__dict__["convnextv2_unet_tiny"](
-            num_classes=6,
-            drop_path_rate=0.1,
-            head_init_scale=0.001,
-            patch_size=16,  ###原来是16
-            use_orig_stem=False,
-            in_chans=3,
-        ).cuda()
-net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/MFFNet_Potsdam_epoch31_92.09799365583991"))
+# net = convnextv2_unet_modify2.__dict__["convnextv2_unet_tiny"](
+#             num_classes=6,
+#             drop_path_rate=0.1,
+#             head_init_scale=0.001,
+#             patch_size=16,  ###原来是16
+#             use_orig_stem=False,
+#             in_chans=3,
+#         ).cuda()
+# net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/MFFNet2_Potsdam_epoch30_91.1336248613015"))
 
 # net = RS3Mamba(num_classes=6).cuda()
-# net.load_state_dict(torch.load("/home/lvhaitao/rs3mamba_epoch32_91.30714304907178-vaihingen"))
+# net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/RS3mamba_epoch45_90.393848321926"))
+
+# net = ACNet(num_class=6, pretrained=False).cuda()
+# net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/ACNet_Potsdam_epoch31_90.75246544602247"))
+
+resnet = resnet18(pretrained=False, efficient=False, use_bn=True)
+net = RFNet(resnet, num_classes=6, use_bn=True).cuda()
+net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/RFNet_Potsdam_epoch50_90.092240556577"))
+
+# net = ESANet(
+#     height=256,
+#     width=256,
+#     num_classes=6,
+#     pretrained_on_imagenet=True,
+#     pretrained_dir="/home/lvhaitao/pretrained_model",
+#     encoder_rgb="resnet34",
+#     encoder_depth="resnet34",
+#     encoder_block="NonBottleneck1D",
+#     nr_decoder_blocks=[3, 3, 3],
+#     channels_decoder=[512, 256, 128],
+#     upsampling="learned-3x3-zeropad"
+# ).cuda()
+# net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/ESANet_Potsdam_epoch48_90.59305027659295"))
+
+#SAGate
+# pretrained_model = '/home/lvhaitao/resnet101_v1c.pth'
+# net = DeepLab(6, pretrained_model=pretrained_model, norm_layer=nn.BatchNorm2d).cuda()
+# init_weight(net.business_layer, nn.init.kaiming_normal_,nn.BatchNorm2d, 1e-5, 0.1,mode='fan_in', nonlinearity='relu')
+# net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/SAGate_Vaihingen_epoch42_91.72787145368382"))
 
 net.eval()
 
@@ -75,36 +150,24 @@ def decode_segmentation(output, palette):
 
     return decoded_images
 
-palette = {
-    0: (255, 255, 255),  # Impervious surfaces (white)
-    1: (0, 0, 255),      # Buildings (blue)
-    2: (0, 255, 255),    # Low vegetation (cyan)
-    3: (0, 255, 0),      # Trees (green)
-    4: (255, 255, 0),    # Cars (yellow)
-    5: (255, 0, 0),      # Clutter (red)
-    6: (0, 0, 0),        # Undefined (black)
-}
+palette = {0 : (255, 255, 255), # Impervious surfaces (white)
+           1 : (0, 0, 255),     # Buildings (blue)
+           2 : (0, 255, 255),   # Low vegetation (cyan)
+           3 : (0, 255, 0),     # Trees (green)
+           4 : (255, 255, 0),   # Cars (yellow)
+           5 : (255, 0, 0),     # Clutter (red)
+           6 : (0, 0, 0)}       # Undefined (black)
 
 for i in range(4):
-    data = io.imread(dataset_dir + "/data{}.png".format(i+1))
-    dsm = io.imread(dataset_dir + "/dsm{}.png".format(i+1))
-    data = 1 / 255 * np.asarray(data.transpose((2, 0, 1)), dtype='float32')
-    dsm = np.asarray(dsm, dtype='float32')
-    min = np.min(dsm)
-    max = np.max(dsm)
-    dsm = (dsm - min) / (max - min)
-    data = torch.from_numpy(data).unsqueeze(0).cuda()
-    dsm = torch.from_numpy(dsm).unsqueeze(0).cuda()
     with torch.no_grad():
+        data = torch.from_numpy(vaihingen_data[str(i+1)]).unsqueeze(0).cuda()
+        dsm = torch.from_numpy(vaihingen_dsm[str(i+1)]).unsqueeze(0).cuda()
         output = net(data, dsm)
     decoded_output = decode_segmentation(output, palette)
     #转为numpy
     decoded_output = decoded_output.squeeze().cpu().numpy().astype(np.uint8)
     image = Image.fromarray(decoded_output)
     image.save("/home/lvhaitao/label{}.png".format(i+1))
-    # plt.imshow(decoded_output[0].numpy())  # 显示第一个样本
-    # plt.axis('off')  # 不显示坐标轴
-    # plt.show()
 
-
+print("结束")
 

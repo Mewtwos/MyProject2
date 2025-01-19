@@ -367,7 +367,7 @@ class UNetFormer(nn.Module):
 
         self.decoder = Decoder(encoder_channels, decode_channels, dropout, window_size, num_classes)
 
-    def forward(self, x, y):
+    def forward(self, x, y=None):
         h, w = x.size()[-2:]
         res1, res2, res3, res4 = self.backbone(x)
         if self.training:
