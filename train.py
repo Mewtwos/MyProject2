@@ -34,8 +34,8 @@ if use_wandb:
         "model": "MFFNet",
     }
     wandb.init(project="FTransUNet", config=config)
-    # wandb.run.name = "convnextv2-tiny-Vaihingen-有权重-modify2"
-    wandb.run.name = "SAGate-Potsdam-有权重"
+    wandb.run.name = "convnextv2-tiny-Postsdam-有权重-modify2(save3)"
+    # wandb.run.name = "SAGate-Potsdam-有权重"
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 torch.cuda.device_count.cache_clear() 
@@ -90,16 +90,16 @@ np.random.seed(seed)
 #             use_orig_stem=False,
 #             in_chans=3,
 #         ).cuda()
-# net = convnextv2_unet_modify2.__dict__["convnextv2_unet_tiny"](
-#             num_classes=6,
-#             drop_path_rate=0.1,
-#             head_init_scale=0.001,
-#             patch_size=16,  
-#             use_orig_stem=False,
-#             in_chans=3,
-#         ).cuda()
-# net = load_imagenet_checkpoint(net, "/home/lvhaitao/pretrained_model/convnextv2_tiny_1k_224_fcmae.pt")
-# print("预训练权重加载完成")
+net = convnextv2_unet_modify2.__dict__["convnextv2_unet_tiny"](
+            num_classes=6,
+            drop_path_rate=0.1,
+            head_init_scale=0.001,
+            patch_size=16,  
+            use_orig_stem=False,
+            in_chans=3,
+        ).cuda()
+net = load_imagenet_checkpoint(net, "/home/lvhaitao/pretrained_model/convnextv2_tiny_1k_224_fcmae.pt")
+print("预训练权重加载完成")
 
 #MAResUNet
 #net = MAResUNet(num_classes=6).cuda()
@@ -140,9 +140,9 @@ np.random.seed(seed)
 # net = ACNet(num_class=6, pretrained=True).cuda()
 
 # SAGate
-pretrained_model = '/home/lvhaitao/resnet101_v1c.pth'
-net = DeepLab(6, pretrained_model=pretrained_model, norm_layer=nn.BatchNorm2d).cuda()
-init_weight(net.business_layer, nn.init.kaiming_normal_,nn.BatchNorm2d, 1e-5, 0.1,mode='fan_in', nonlinearity='relu')
+# pretrained_model = '/home/lvhaitao/resnet101_v1c.pth'
+# net = DeepLab(6, pretrained_model=pretrained_model, norm_layer=nn.BatchNorm2d).cuda()
+# init_weight(net.business_layer, nn.init.kaiming_normal_,nn.BatchNorm2d, 1e-5, 0.1,mode='fan_in', nonlinearity='relu')
 
 
 params = 0
@@ -151,7 +151,6 @@ for name, param in net.named_parameters():
 print(params)
 if use_wandb:
     wandb.log({"params": params})
-# Load the datasets
 
 print("training : ", train_ids)
 print("testing : ", test_ids)
@@ -227,7 +226,6 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
     mean_losses = np.zeros(100000000)
     weights = weights.cuda()
 
-    # criterion = nn.NLLLoss2d(weight=weights)
     iter_ = 0
     acc_best = 89.0
     log_loss = 0
@@ -260,12 +258,12 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
         if scheduler is not None:
             scheduler.step()
             current_lr = optimizer.param_groups[0]['lr']
-        if e > 30:
+        if e > 0:
             net.eval()
             acc, mf1, miou, oa_dict = test(net, test_ids, all=False, stride=Stride_Size)
             net.train()
             if acc > acc_best:
-                torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/savemodel/SAGate_Potsdam_epoch{}_{}'.format(e, acc))
+                torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/savemodel/MFFNet3_Potsdam_epoch{}_{}'.format(e, acc))
                 acc_best = acc
             if use_wandb:
                 wandb.log({"epoch": e, "total_accuracy": acc, "train_loss": log_loss, "mF1": mf1, "mIoU": miou, "lr": current_lr, **oa_dict})

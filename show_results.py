@@ -12,7 +12,7 @@ from othermodel.Transunet import VisionTransformer as TransUNet
 from othermodel.ukan import UKAN
 from othermodel.unetformer import UNetFormer
 # from othermodel.rs3mamba import RS3Mamba, load_pretrained_ckpt
-# from convnextv2 import convnextv2_unet_modify2
+from convnextv2 import convnextv2_unet_modify2
 from othermodel.ACNet import ACNet
 from othermodel.RFNet import RFNet, resnet18
 from othermodel.ESANet import ESANet
@@ -23,9 +23,8 @@ import torch.nn as nn
 vaihingen_data = {}
 vaihingen_dsm = {}
 patch_size = 256
-# dataset = "Vaihingen"
-dataset = "Potsdam"
-
+dataset = "Vaihingen"
+# dataset = "Potsdam"
 
 if dataset == "Vaihingen":
     index_dict = {"1":30, "2":30, "3":30, "4":30}
@@ -33,9 +32,9 @@ if dataset == "Vaihingen":
     y_dict = {"1":1441, "2":544, "3":1601, "4":1244}
     dataset_dir = "/data/lvhaitao/dataset/Vaihingen/"
 else:
-    index_dict = {"1":"3_10", "2":"3_10", "3":"3_10", "4":"3_10"}
-    x_dict = {"1":4462, "2":853, "3":3406, "4":4747}
-    y_dict = {"1":1947, "2":5138, "3":2800, "4":2231}
+    index_dict = {"1":"4_10", "2":"3_10", "3":"3_10", "4":"3_10"}
+    x_dict = {"1":3226, "2":853, "3":3406, "4":4747}
+    y_dict = {"1":3413, "2":5138, "3":2800, "4":2231}
     dataset_dir = "/data/lvhaitao/dataset/Potsdam/"
 
 for i in range(4):
@@ -60,9 +59,6 @@ for i in range(4):
     dsm_p = dsm[x1:x2, y1:y2]
     vaihingen_data[str(i+1)] = data_p
     vaihingen_dsm[str(i+1)] = dsm_p
-
-
-
 
 
 # net = ABCNet(6).cuda()
@@ -93,15 +89,16 @@ for i in range(4):
 # net.load_state_dict(torch.load("/home/lvhaitao/unetformer_epoch50_91.6432166560365"))
 # net.load_state_dict(torch.load("E:/训练的模型/Potsdam/unetformer_epoch44_90.46410366807537-potsdam"))
 
-# net = convnextv2_unet_modify2.__dict__["convnextv2_unet_tiny"](
-#             num_classes=6,
-#             drop_path_rate=0.1,
-#             head_init_scale=0.001,
-#             patch_size=16,  ###原来是16
-#             use_orig_stem=False,
-#             in_chans=3,
-#         ).cuda()
-# net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/MFFNet2_Potsdam_epoch30_91.1336248613015"))
+net = convnextv2_unet_modify2.__dict__["convnextv2_unet_tiny"](
+            num_classes=6,
+            drop_path_rate=0.1,
+            head_init_scale=0.001,
+            patch_size=16,  ###原来是16
+            use_orig_stem=False,
+            in_chans=3,
+        ).cuda()
+net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/MFFNet3_Vaihingen_epoch15_92.19754860296956"))
+# net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/MFFNet2_Potsdam_epoch46_91.16632234306633"))
 
 # net = RS3Mamba(num_classes=6).cuda()
 # net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/RS3mamba_epoch45_90.393848321926"))
@@ -109,9 +106,9 @@ for i in range(4):
 # net = ACNet(num_class=6, pretrained=False).cuda()
 # net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/ACNet_Potsdam_epoch31_90.75246544602247"))
 
-resnet = resnet18(pretrained=False, efficient=False, use_bn=True)
-net = RFNet(resnet, num_classes=6, use_bn=True).cuda()
-net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/RFNet_Potsdam_epoch50_90.092240556577"))
+# resnet = resnet18(pretrained=False, efficient=False, use_bn=True)
+# net = RFNet(resnet, num_classes=6, use_bn=True).cuda()
+# net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/RFNet_Potsdam_epoch50_90.092240556577"))
 
 # net = ESANet(
 #     height=256,
@@ -132,7 +129,7 @@ net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/RFNet_Potsda
 # pretrained_model = '/home/lvhaitao/resnet101_v1c.pth'
 # net = DeepLab(6, pretrained_model=pretrained_model, norm_layer=nn.BatchNorm2d).cuda()
 # init_weight(net.business_layer, nn.init.kaiming_normal_,nn.BatchNorm2d, 1e-5, 0.1,mode='fan_in', nonlinearity='relu')
-# net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/SAGate_Vaihingen_epoch42_91.72787145368382"))
+# net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/SAGate_Potsdam_epoch45_90.82541253543694"))
 
 net.eval()
 
@@ -156,7 +153,8 @@ palette = {0 : (255, 255, 255), # Impervious surfaces (white)
            3 : (0, 255, 0),     # Trees (green)
            4 : (255, 255, 0),   # Cars (yellow)
            5 : (255, 0, 0),     # Clutter (red)
-           6 : (0, 0, 0)}       # Undefined (black)
+        #    6 : (0, 0, 0)
+           }       # Undefined (black)
 
 for i in range(4):
     with torch.no_grad():
