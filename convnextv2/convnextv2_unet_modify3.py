@@ -50,8 +50,9 @@ class Block(nn.Module):
         return x
     
 class FusionBlock(nn.Module):
-    def __init__(self, dim: int, drop_path=0.0):
+    def __init__(self, dim: int, drop_path=0.0, use_dwt=False):
         super().__init__()
+        self.use_dwt = use_dwt
         self.blockx = Block(dim=dim, drop_path=drop_path)
         self.blocky = Block(dim=dim, drop_path=drop_path)
         self.dwt = DWT_2D(wave='haar')
@@ -67,22 +68,24 @@ class FusionBlock(nn.Module):
         x, y = input
         blockx = self.blockx(x)
         blocky = self.blocky(y)
-        dwtx = self.dwt(self.convx(x))
-        dwty = self.dwt(self.convy(y))
-        llx, lhx, hlx, hhx = torch.split(dwtx, x.shape[1]//4, dim=1)
-        lly, lhy, hly, hhy = torch.split(dwty, y.shape[1]//4, dim=1)
-        lh_fuse = torch.max(lhx, lhy)
-        hl_fuse = torch.max(hlx, hly)
-        hh_fuse = torch.max(hhx, hhy)
-        dwtx = torch.cat([llx, lh_fuse, hl_fuse, hh_fuse], dim=1)
-        dwty = torch.cat([lly, lh_fuse, hl_fuse, hh_fuse], dim=1)
-        idwtx = self.idwt(dwtx)
-        idwty = self.idwt(dwty)
-        idwtx = self.iconvx(idwtx)
-        idwty = self.iconvy(idwty)
-        x = blockx + idwtx * self.wx + idwty * (1 - self.wx)
-        y = blocky + idwty * self.wy + idwtx * (1 - self.wy)
-        return x, y
+        if self.use_dwt:
+            dwtx = self.dwt(self.convx(x))
+            dwty = self.dwt(self.convy(y))
+            llx, lhx, hlx, hhx = torch.split(dwtx, x.shape[1]//4, dim=1)
+            lly, lhy, hly, hhy = torch.split(dwty, y.shape[1]//4, dim=1)
+            lh_fuse = torch.max(lhx, lhy)
+            hl_fuse = torch.max(hlx, hly)
+            hh_fuse = torch.max(hhx, hhy)
+            dwtx = torch.cat([llx, lh_fuse, hl_fuse, hh_fuse], dim=1)
+            dwty = torch.cat([lly, lh_fuse, hl_fuse, hh_fuse], dim=1)
+            idwtx = self.idwt(dwtx)
+            idwty = self.idwt(dwty)
+            idwtx = self.iconvx(idwtx)
+            idwty = self.iconvy(idwty)
+            x = blockx + idwtx * self.wx + idwty * (1 - self.wx)
+            y = blocky + idwty * self.wy + idwtx * (1 - self.wy)
+            return x, y
+        return blockx, blocky
 
 class UpsampleBlock(nn.Module):
     def __init__(self, inp_dim: int, out_dim: int, scale_factor: float = 2.0):
@@ -122,12 +125,12 @@ class ConvNeXtV2_unet(nn.Module):
         depths: list[int] = None,
         dims: list[int] = None,
         drop_path_rate: float = 0.0,
-        head_init_scale: float = 1.0,
         heatmap: bool = False,
         use_orig_stem: bool = False,
     ):
         super().__init__()
         self.depths = depths
+        self.dsm_depths = [2, 2, 6, 2]
         self.heatmap = heatmap
         if self.depths is None:  # set default value
             self.depths = [3, 3, 9, 3]
@@ -187,8 +190,9 @@ class ConvNeXtV2_unet(nn.Module):
             stage = nn.Sequential(
                 *[
                     FusionBlock(dim=dims[i], drop_path=dp_rates[cur + j])
-                    for j in range(depths[i])
-                ]
+                    for j in range(depths[i]-1)
+                ],
+                FusionBlock(dim=dims[i], drop_path=dp_rates[cur + depths[i] - 1], use_dwt=True)
             )
             self.stages.append(stage)
             cur += depths[i]

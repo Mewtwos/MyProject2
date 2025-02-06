@@ -7,7 +7,7 @@ from skimage import io
 from othermodel.CMFNet import CMFNet
 from othermodel.CMGFNet import FuseNet
 from othermodel.MAResUNet import MAResUNet
-from othermodel.Transunet import CONFIGS as CONFIGS_ViT_seg
+# from othermodel.Transunet import CONFIGS as CONFIGS_ViT_seg
 from othermodel.Transunet import VisionTransformer as TransUNet
 from othermodel.ukan import UKAN
 from othermodel.unetformer import UNetFormer
@@ -18,6 +18,8 @@ from othermodel.RFNet import RFNet, resnet18
 from othermodel.ESANet import ESANet
 from othermodel.SAGate import DeepLab, init_weight
 import torch.nn as nn
+from model.vitcross_seg_modeling import VisionTransformer as ViT_seg
+from model.vitcross_seg_modeling import CONFIGS as CONFIGS_ViT_seg
 
 
 vaihingen_data = {}
@@ -89,16 +91,16 @@ for i in range(4):
 # net.load_state_dict(torch.load("/home/lvhaitao/unetformer_epoch50_91.6432166560365"))
 # net.load_state_dict(torch.load("E:/训练的模型/Potsdam/unetformer_epoch44_90.46410366807537-potsdam"))
 
-net = convnextv2_unet_modify2.__dict__["convnextv2_unet_tiny"](
-            num_classes=6,
-            drop_path_rate=0.1,
-            head_init_scale=0.001,
-            patch_size=16,  ###原来是16
-            use_orig_stem=False,
-            in_chans=3,
-        ).cuda()
-net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/MFFNet3_Vaihingen_epoch15_92.19754860296956"))
-# net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/MFFNet2_Potsdam_epoch46_91.16632234306633"))
+# net = convnextv2_unet_modify2.__dict__["convnextv2_unet_tiny"](
+#             num_classes=6,
+#             drop_path_rate=0.1,
+#             head_init_scale=0.001,
+#             patch_size=16,  ###原来是16
+#             use_orig_stem=False,
+#             in_chans=3,
+#         ).cuda()
+# net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/MFFNet(test_in_train)_Vaihingen_epoch24_91.97493429597384"))
+# net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/MFFNet3_Potsdam_epoch29_90.97468546733342"))
 
 # net = RS3Mamba(num_classes=6).cuda()
 # net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/RS3mamba_epoch45_90.393848321926"))
@@ -130,6 +132,16 @@ net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/MFFNet3_Vaih
 # net = DeepLab(6, pretrained_model=pretrained_model, norm_layer=nn.BatchNorm2d).cuda()
 # init_weight(net.business_layer, nn.init.kaiming_normal_,nn.BatchNorm2d, 1e-5, 0.1,mode='fan_in', nonlinearity='relu')
 # net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/SAGate_Potsdam_epoch45_90.82541253543694"))
+
+#FTransUnet
+config_vit = CONFIGS_ViT_seg['R50-ViT-B_16']
+config_vit.n_classes = 6
+config_vit.n_skip = 3
+config_vit.patches.grid = (int(256 / 16), int(256 / 16))
+net = ViT_seg(config_vit, img_size=256, num_classes=6).cuda()
+net.load_from(weights=np.load(config_vit.pretrained_path))
+net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/FTransUnet_Vaihingen_epoch22_92.26214985850798"))
+
 
 net.eval()
 

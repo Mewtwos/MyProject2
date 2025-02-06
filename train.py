@@ -17,7 +17,7 @@ import wandb
 # from othermodel.rs3mamba import RS3Mamba, load_pretrained_ckpt
 from othermodel.Transunet import VisionTransformer as TransUNet
 # from othermodel.Transunet import CONFIGS as CONFIGS_ViT_seg
-from convnextv2 import convnextv2_unet_modify, convnextv2_unet_modify2
+from convnextv2 import convnextv2_unet_modify, convnextv2_unet_modify2, convnextv2_unet_modify3
 from othermodel.MAResUNet import MAResUNet
 from othermodel.ABCNet import ABCNet
 from convnextv2.helpers import load_custom_checkpoint, load_imagenet_checkpoint
@@ -26,6 +26,7 @@ from othermodel.ESANet import ESANet
 from othermodel.ACNet import ACNet
 from othermodel.SAGate import DeepLab, init_weight
 from custom_repr import enable_custom_repr
+from pynvml import *
 enable_custom_repr()
 
 use_wandb = True
@@ -34,12 +35,11 @@ if use_wandb:
         "model": "MFFNet",
     }
     wandb.init(project="FTransUNet", config=config)
-    wandb.run.name = "convnextv2-tiny-Postsdam-有权重-modify2(save3)"
-    # wandb.run.name = "SAGate-Potsdam-有权重"
+    wandb.run.name = "convnextv2-tiny-Potsdam-有权重-modify3(每个stage只使用一次dwt)"
+    # wandb.run.name = "FTransUnet-Vaihingen-有权重"
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 torch.cuda.device_count.cache_clear() 
-from pynvml import *
 nvmlInit()
 handle = nvmlDeviceGetHandleByIndex(int(os.environ["CUDA_VISIBLE_DEVICES"]))
 print("Device :", nvmlDeviceGetName(handle))
@@ -90,10 +90,17 @@ np.random.seed(seed)
 #             use_orig_stem=False,
 #             in_chans=3,
 #         ).cuda()
-net = convnextv2_unet_modify2.__dict__["convnextv2_unet_tiny"](
+# net = convnextv2_unet_modify2.__dict__["convnextv2_unet_tiny"](
+#             num_classes=6,
+#             drop_path_rate=0.1,
+#             head_init_scale=0.001,
+#             patch_size=16,  
+#             use_orig_stem=False,
+#             in_chans=3,
+#         ).cuda()
+net = convnextv2_unet_modify3.__dict__["convnextv2_unet_tiny"](
             num_classes=6,
             drop_path_rate=0.1,
-            head_init_scale=0.001,
             patch_size=16,  
             use_orig_stem=False,
             in_chans=3,
@@ -245,7 +252,7 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
 
             if iter_ % 100 == 0:
                 clear_output()
-                rgb = np.asarray(255 * np.transpose(data.data.cpu().numpy()[0], (1, 2, 0)), dtype='uint8')
+                # rgb = np.asarray(255 * np.transpose(data.data.cpu().numpy()[0], (1, 2, 0)), dtype='uint8')
                 pred = np.argmax(output.data.cpu().numpy()[0], axis=0)
                 gt = target.data.cpu().numpy()[0]
                 print('Train (epoch {}/{}) [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tAccuracy: {}'.format(
@@ -258,12 +265,12 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
         if scheduler is not None:
             scheduler.step()
             current_lr = optimizer.param_groups[0]['lr']
-        if e > 0:
+        if e > 10:
             net.eval()
             acc, mf1, miou, oa_dict = test(net, test_ids, all=False, stride=Stride_Size)
             net.train()
             if acc > acc_best:
-                torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/savemodel/MFFNet3_Potsdam_epoch{}_{}'.format(e, acc))
+                # torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/savemodel/MFFNet(modify3)_Potsdam_epoch{}_{}'.format(e, acc))
                 acc_best = acc
             if use_wandb:
                 wandb.log({"epoch": e, "total_accuracy": acc, "train_loss": log_loss, "mF1": mf1, "mIoU": miou, "lr": current_lr, **oa_dict})
