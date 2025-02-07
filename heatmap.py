@@ -40,8 +40,8 @@ def decode_segmentation(output, palette):
     return decoded_images
 
 index = 30
-x1 = 510
-y1 = 1601
+x1 = 877
+y1 = 1244
 dataset_dir = "/data/lvhaitao/dataset/Vaihingen/"
 
 data = io.imread(dataset_dir+'top/top_mosaic_09cm_area{}.tif'.format(index))
@@ -63,7 +63,7 @@ net = convnextv2_unet_modify2.__dict__["convnextv2_unet_tiny"](
             heatmap=True,
             in_chans=3,
         ).cuda()
-net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/MFFNet(no_Mconvnext)_Vaihingen_epoch29_92.24731193440314"))
+net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/MFFNet2_Vaihingen_epoch40_92.17164587537671"))
 # net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/MFFNet3_Potsdam_epoch29_90.97468546733342"))
 
 

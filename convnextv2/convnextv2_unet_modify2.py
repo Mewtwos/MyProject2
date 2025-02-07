@@ -301,6 +301,10 @@ class ConvNeXtV2_unet(nn.Module):
 
         out = self.decoder(res4, res3, res2, res1, h, w)
         if heatmaps:
+            heatmaps.append(res1)
+            heatmaps.append(res2)
+            heatmaps.append(res3)
+            heatmaps.append(res4)
             return out, heatmaps
         return out
 

@@ -187,7 +187,6 @@ def load_imagenet_checkpoint(model, pretrained_model):
 
     print("Load pre-trained checkpoint from: %s" % pretrained_model)
     checkpoint_model = checkpoint["model"] if "model" in checkpoint else checkpoint
-    state_dict = model.state_dict()
 
     #remap keys
     new_ckpt = OrderedDict()

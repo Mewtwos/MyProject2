@@ -50,7 +50,7 @@ class Block(nn.Module):
         return x
     
 class FusionBlock(nn.Module):
-    def __init__(self, dim: int, drop_path=0.0, use_dwt=False):
+    def __init__(self, dim: int, drop_path=0.0, use_dwt=True):
         super().__init__()
         self.use_dwt = use_dwt
         self.blockx = Block(dim=dim, drop_path=drop_path)
@@ -67,7 +67,8 @@ class FusionBlock(nn.Module):
     def forward(self, input) -> Tensor:
         x, y = input
         blockx = self.blockx(x)
-        blocky = self.blocky(y)
+        blocky = self.blockx(y)
+        # blocky = self.blocky(y)
         if self.use_dwt:
             dwtx = self.dwt(self.convx(x))
             dwty = self.dwt(self.convy(y))
@@ -190,9 +191,9 @@ class ConvNeXtV2_unet(nn.Module):
             stage = nn.Sequential(
                 *[
                     FusionBlock(dim=dims[i], drop_path=dp_rates[cur + j])
-                    for j in range(depths[i]-1)
+                    for j in range(depths[i])
                 ],
-                FusionBlock(dim=dims[i], drop_path=dp_rates[cur + depths[i] - 1], use_dwt=True)
+                # FusionBlock(dim=dims[i], drop_path=dp_rates[cur + depths[i] - 1], use_dwt=True)
             )
             self.stages.append(stage)
             cur += depths[i]
