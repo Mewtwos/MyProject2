@@ -17,7 +17,7 @@ import wandb
 # from othermodel.rs3mamba import RS3Mamba, load_pretrained_ckpt
 from othermodel.Transunet import VisionTransformer as TransUNet
 # from othermodel.Transunet import CONFIGS as CONFIGS_ViT_seg
-from convnextv2 import convnextv2_unet_modify, convnextv2_unet_modify2, convnextv2_unet_modify3
+from convnextv2 import convnextv2_unet_modify, convnextv2_unet_modify2, convnextv2_unet_modify3, convnextv2_unet_modify4
 from othermodel.MAResUNet import MAResUNet
 from othermodel.ABCNet import ABCNet
 from convnextv2.helpers import load_custom_checkpoint, load_imagenet_checkpoint
@@ -26,6 +26,7 @@ from othermodel.ESANet import ESANet
 from othermodel.ACNet import ACNet
 from othermodel.SAGate import DeepLab, init_weight
 from custom_repr import enable_custom_repr
+from convnextv2.helpers import DiceLoss, SoftCrossEntropyLoss
 from pynvml import *
 enable_custom_repr()
 
@@ -35,10 +36,10 @@ if use_wandb:
         "model": "MFFNet",
     }
     wandb.init(project="FTransUNet", config=config)
-    wandb.run.name = "convnextv2-tiny-Vaihingen-有权重-modify3(共享编码器)"
-    # wandb.run.name = "FTransUnet-Vaihingen-有权重"
+    wandb.run.name = "convnextv2-tiny-Vaihingen-有权重-modify3(共享stage)-spa+lla+0.5diceloss+0.4auxloss"
+    # wandb.run.name = "FTransUnet-Vaihingen-有权重2
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 torch.cuda.device_count.cache_clear() 
 nvmlInit()
 handle = nvmlDeviceGetHandleByIndex(int(os.environ["CUDA_VISIBLE_DEVICES"]))
@@ -46,7 +47,9 @@ print("Device :", nvmlDeviceGetName(handle))
 
 seed = 3407
 torch.manual_seed(seed)
+random.seed(seed)  #新增
 np.random.seed(seed)
+torch.cuda.manual_seed_all(seed) #新增
 
 #CMFNet
 # net = CMFNet().cuda()
@@ -104,6 +107,13 @@ net = convnextv2_unet_modify3.__dict__["convnextv2_unet_tiny"](
             use_orig_stem=False,
             in_chans=3,
         ).cuda()
+# net = convnextv2_unet_modify4.__dict__["convnextv2_unet_tiny"](
+#             num_classes=6,
+#             drop_path_rate=0.1,
+#             patch_size=16,  
+#             use_orig_stem=False,
+#             in_chans=3,
+#         ).cuda()
 net = load_imagenet_checkpoint(net, "/home/lvhaitao/pretrained_model/convnextv2_tiny_1k_224_fcmae.pt")
 print("预训练权重加载完成")
 
@@ -231,6 +241,8 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
     losses = np.zeros(1000000)
     mean_losses = np.zeros(100000000)
     weights = weights.cuda()
+    diceloss = DiceLoss(smooth=0.05)
+    aux_loss = SoftCrossEntropyLoss(smooth_factor=0.05, ignore_index=255)
 
     iter_ = 0
     acc_best = 89.0
@@ -240,13 +252,14 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
         for batch_idx, (data, dsm, target) in enumerate(train_loader):
             data, dsm, target = Variable(data.cuda()), Variable(dsm.cuda()), Variable(target.cuda())
             optimizer.zero_grad()
-            output = net(data, dsm)
-            loss = CrossEntropy2d(output, target, weight=weights)
+            output, aux_out = net(data, dsm)
+            # loss = CrossEntropy2d(output, target, weight=weights)
+            loss = CrossEntropy2d(output, target, weight=weights) + 0.5 * diceloss(output, target) + 0.4 * aux_loss(aux_out, target)
             loss.backward()
             optimizer.step()
 
-            losses[iter_] = loss.data
-            log_loss += loss.data
+            losses[iter_] = loss.item()
+            log_loss += loss.item()
             mean_losses[iter_] = np.mean(losses[max(0, iter_ - 100):iter_])
 
             if iter_ % 100 == 0:
@@ -256,7 +269,7 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
                 gt = target.data.cpu().numpy()[0]
                 print('Train (epoch {}/{}) [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tAccuracy: {}'.format(
                     e, epochs, batch_idx, len(train_loader),
-                    100. * batch_idx / len(train_loader), loss.data, accuracy(pred, gt)))
+                    100. * batch_idx / len(train_loader), loss.item(), accuracy(pred, gt)))
             iter_ += 1
 
             del (data, target, loss)
@@ -264,12 +277,12 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
         if scheduler is not None:
             scheduler.step()
             current_lr = optimizer.param_groups[0]['lr']
-        if e > 10:
+        if e > 20:
             net.eval()
             acc, mf1, miou, oa_dict = test(net, test_ids, all=False, stride=Stride_Size)
             net.train()
             if acc > acc_best:
-                # torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/savemodel/MFFNetNoFEF(test_in_train)_Vaihingen_epoch{}_{}'.format(e, acc))
+                torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixall1)_Vaihingen_epoch{}_{}'.format(e, acc))
                 acc_best = acc
             if use_wandb:
                 wandb.log({"epoch": e, "total_accuracy": acc, "train_loss": log_loss, "mF1": mf1, "mIoU": miou, "lr": current_lr, **oa_dict})

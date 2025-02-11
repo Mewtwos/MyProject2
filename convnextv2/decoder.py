@@ -225,6 +225,21 @@ class FeatureRefinementHead(nn.Module):
         x = self.act(x)
 
         return x
+
+class AuxHead(nn.Module):
+
+    def __init__(self, in_channels=64, num_classes=8):
+        super().__init__()
+        self.conv = ConvBNReLU(in_channels, in_channels)
+        self.drop = nn.Dropout(0.1)
+        self.conv_out = Conv(in_channels, num_classes, kernel_size=1)
+
+    def forward(self, x, h, w):
+        feat = self.conv(x)
+        feat = self.drop(feat)
+        feat = self.conv_out(feat)
+        feat = F.interpolate(feat, size=(h, w), mode='bilinear', align_corners=False)
+        return feat
     
 class Decoder(nn.Module):
     def __init__(self,
@@ -250,22 +265,59 @@ class Decoder(nn.Module):
         self.segmentation_head = nn.Sequential(ConvBNReLU(decode_channels, decode_channels),
                                                nn.Dropout2d(p=dropout, inplace=True),
                                                Conv(decode_channels, num_classes, kernel_size=1))
+        if self.training:
+            self.up4 = nn.UpsamplingBilinear2d(scale_factor=4)
+            self.up3 = nn.UpsamplingBilinear2d(scale_factor=2)
+            self.aux_head = AuxHead(decode_channels, num_classes)
         self.init_weight()
 
     def forward(self, res1, res2, res3, res4, h, w):
-        x = self.b4(self.pre_conv(res4))
-        x = self.p3(x, res3)
-        x = self.b3(x)
+        # x = self.b4(self.pre_conv(res4))
+        # x = self.p3(x, res3)
+        # x = self.b3(x)
 
-        x = self.p2(x, res2)
-        x = self.b2(x)
+        # x = self.p2(x, res2)
+        # x = self.b2(x)
 
-        x = self.p1(x, res1)
+        # x = self.p1(x, res1)
         
-        x = self.segmentation_head(x)
-        x = F.interpolate(x, size=(h, w), mode='bilinear', align_corners=False)
+        # x = self.segmentation_head(x)
+        # x = F.interpolate(x, size=(h, w), mode='bilinear', align_corners=False)
 
-        return x
+        # return x
+        if self.training:
+            x = self.b4(self.pre_conv(res4))
+            h4 = self.up4(x)
+
+            x = self.p3(x, res3)
+            x = self.b3(x)
+            h3 = self.up3(x)
+
+            x = self.p2(x, res2)
+            x = self.b2(x)
+            h2 = x
+            x = self.p1(x, res1)
+            x = self.segmentation_head(x)
+            x = F.interpolate(x, size=(h, w), mode='bilinear', align_corners=False)
+
+            ah = h4 + h3 + h2
+            ah = self.aux_head(ah, h, w)
+
+            return x, ah
+        else:
+            x = self.b4(self.pre_conv(res4))
+            x = self.p3(x, res3)
+            x = self.b3(x)
+
+            x = self.p2(x, res2)
+            x = self.b2(x)
+
+            x = self.p1(x, res1)
+
+            x = self.segmentation_head(x)
+            x = F.interpolate(x, size=(h, w), mode='bilinear', align_corners=False)
+
+            return x
     
     def init_weight(self):
         for m in self.children():
