@@ -103,85 +103,29 @@ class Block(nn.Module):
         x = input + self.drop_path(x)
         return x
     
-class FusionBlock(nn.Module): #共享stage
-    def __init__(self, dim: int, drop_path=0.0, use_dwt=True):
-        super().__init__()
-        self.use_dwt = use_dwt
-        self.blockx = Block(dim=dim, drop_path=drop_path)
-        # self.blocky = Block(dim=dim, drop_path=drop_path)
-        self.dwt = DWT_2D(wave='haar')
-        self.idwt = IDWT_2D(wave='haar')
-        self.convx = nn.Conv2d(dim, dim // 4, kernel_size=1, bias=False)
-        self.convy = nn.Conv2d(dim, dim // 4, kernel_size=1, bias=False)
-        self.iconvx = nn.Conv2d(dim // 4, dim, kernel_size=1, bias=False)
-        self.iconvy = nn.Conv2d(dim // 4, dim, kernel_size=1, bias=False)
-        self.wx = torch.nn.Parameter(torch.tensor(0.5), requires_grad=True)
-        self.wy = torch.nn.Parameter(torch.tensor(0.5), requires_grad=True)
-        self.cross_attnx = CrossAttention(dim//4)
-        self.cross_attny = CrossAttention(dim//4)
-        self.spatial_attn = SpatialAttention()
-
-    def forward(self, input) -> Tensor:
-        x, y = input
-        blockx = self.blockx(x)
-        blocky = self.blockx(y)
-        # blocky = self.blocky(y)
-        if self.use_dwt:
-            dwtx = self.dwt(self.convx(x))
-            dwty = self.dwt(self.convy(y))
-            llx, lhx, hlx, hhx = torch.split(dwtx, x.shape[1]//4, dim=1)
-            lly, lhy, hly, hhy = torch.split(dwty, y.shape[1]//4, dim=1)
-            # lh_fuse = torch.max(lhx, lhy)
-            # hl_fuse = torch.max(hlx, hly)
-            # hh_fuse = torch.max(hhx, hhy)
-            #spatial attention
-            spatial_attn = self.spatial_attn(torch.cat([lhx, hlx, hhx, lhy, hly, hhy], dim=1))
-            llx = llx * spatial_attn
-            lly = lly * spatial_attn
-            # cross attention
-            llxf = llx.flatten(2).transpose(1, 2)
-            llyf = lly.flatten(2).transpose(1, 2)
-            ll_fusex = self.cross_attnx(llxf, llyf)
-            ll_fusey = self.cross_attny(llyf, llxf)
-            ll_fusex = ll_fusex.transpose(1, 2).view_as(llx)
-            ll_fusey = ll_fusey.transpose(1, 2).view_as(lly)
-
-            dwtx = torch.cat([ll_fusex, lhx, hlx, hhx], dim=1)
-            dwty = torch.cat([ll_fusey, lhy, hly, hhy], dim=1)
-
-            # dwtx = torch.cat([llx, lh_fuse, hl_fuse, hh_fuse], dim=1)
-            # dwty = torch.cat([lly, lh_fuse, hl_fuse, hh_fuse], dim=1)
-            idwtx = self.idwt(dwtx)
-            idwty = self.idwt(dwty)
-            idwtx = self.iconvx(idwtx)
-            idwty = self.iconvy(idwty)
-            x = blockx + idwtx * self.wx + idwty * (1 - self.wx)
-            y = blocky + idwty * self.wy + idwtx * (1 - self.wy)
-            return x, y
-        return blockx, blocky
-
-# class FusionBlock(nn.Module):  #修改版
-#     def __init__(self, dim: int, drop_path=0.0, use_dwt=True, reduction=4):
+# class FusionBlock(nn.Module): #共享stage
+#     def __init__(self, dim: int, drop_path=0.0, use_dwt=True):
 #         super().__init__()
 #         self.use_dwt = use_dwt
 #         self.blockx = Block(dim=dim, drop_path=drop_path)
+#         # self.blocky = Block(dim=dim, drop_path=drop_path)
 #         self.dwt = DWT_2D(wave='haar')
 #         self.idwt = IDWT_2D(wave='haar')
-#         self.convx = DepthWiseConv(dim, dim // reduction)
-#         self.convy = DepthWiseConv(dim, dim // reduction)
-#         self.iconvx = DepthWiseConv(dim // reduction, dim)
-#         self.iconvy = DepthWiseConv(dim // reduction, dim)
+#         self.convx = nn.Conv2d(dim, dim // 4, kernel_size=1, bias=False)
+#         self.convy = nn.Conv2d(dim, dim // 4, kernel_size=1, bias=False)
+#         self.iconvx = nn.Conv2d(dim // 4, dim, kernel_size=1, bias=False)
+#         self.iconvy = nn.Conv2d(dim // 4, dim, kernel_size=1, bias=False)
 #         self.wx = torch.nn.Parameter(torch.tensor(0.5), requires_grad=True)
 #         self.wy = torch.nn.Parameter(torch.tensor(0.5), requires_grad=True)
-#         self.cross_attnx = CrossAttention(dim//reduction)
-#         self.cross_attny = CrossAttention(dim//reduction)
+#         self.cross_attnx = CrossAttention(dim//4)
+#         self.cross_attny = CrossAttention(dim//4)
 #         self.spatial_attn = SpatialAttention()
-#         self.act = nn.GELU()
 
 #     def forward(self, input) -> Tensor:
 #         x, y = input
 #         blockx = self.blockx(x)
 #         blocky = self.blockx(y)
+#         # blocky = self.blocky(y)
 #         if self.use_dwt:
 #             dwtx = self.dwt(self.convx(x))
 #             dwty = self.dwt(self.convy(y))
@@ -209,14 +153,70 @@ class FusionBlock(nn.Module): #共享stage
 #             # dwty = torch.cat([lly, lh_fuse, hl_fuse, hh_fuse], dim=1)
 #             idwtx = self.idwt(dwtx)
 #             idwty = self.idwt(dwty)
-#             idwtx = self.act(idwtx)
-#             idwty = self.act(idwty)
 #             idwtx = self.iconvx(idwtx)
 #             idwty = self.iconvy(idwty)
 #             x = blockx + idwtx * self.wx + idwty * (1 - self.wx)
 #             y = blocky + idwty * self.wy + idwtx * (1 - self.wy)
 #             return x, y
 #         return blockx, blocky
+
+class FusionBlock(nn.Module):  #修改版
+    def __init__(self, dim: int, drop_path=0.0, use_dwt=True, reduction=4):
+        super().__init__()
+        self.use_dwt = use_dwt
+        self.blockx = Block(dim=dim, drop_path=drop_path)
+        self.dwt = DWT_2D(wave='haar')
+        self.idwt = IDWT_2D(wave='haar')
+        self.convx = DepthWiseConv(dim, dim // reduction)
+        self.convy = DepthWiseConv(dim, dim // reduction)
+        self.iconvx = DepthWiseConv(dim // reduction, dim)
+        self.iconvy = DepthWiseConv(dim // reduction, dim)
+        self.wx = torch.nn.Parameter(torch.tensor(0.5), requires_grad=True)
+        self.wy = torch.nn.Parameter(torch.tensor(0.5), requires_grad=True)
+        self.cross_attnx = CrossAttention(dim//reduction)
+        self.cross_attny = CrossAttention(dim//reduction)
+        self.spatial_attn = SpatialAttention()
+        self.act = nn.GELU()
+
+    def forward(self, input) -> Tensor:
+        x, y = input
+        blockx = self.blockx(x)
+        blocky = self.blockx(y)
+        if self.use_dwt:
+            dwtx = self.dwt(self.convx(x))
+            dwty = self.dwt(self.convy(y))
+            llx, lhx, hlx, hhx = torch.split(dwtx, x.shape[1]//4, dim=1)
+            lly, lhy, hly, hhy = torch.split(dwty, y.shape[1]//4, dim=1)
+            # lh_fuse = torch.max(lhx, lhy)
+            # hl_fuse = torch.max(hlx, hly)
+            # hh_fuse = torch.max(hhx, hhy)
+            #spatial attention
+            spatial_attn = self.spatial_attn(torch.cat([lhx, hlx, hhx, lhy, hly, hhy], dim=1))
+            llx = llx * spatial_attn
+            lly = lly * spatial_attn
+            # cross attention
+            llxf = llx.flatten(2).transpose(1, 2)
+            llyf = lly.flatten(2).transpose(1, 2)
+            ll_fusex = self.cross_attnx(llxf, llyf)
+            ll_fusey = self.cross_attny(llyf, llxf)
+            ll_fusex = ll_fusex.transpose(1, 2).view_as(llx)
+            ll_fusey = ll_fusey.transpose(1, 2).view_as(lly)
+
+            dwtx = torch.cat([ll_fusex, lhx, hlx, hhx], dim=1)
+            dwty = torch.cat([ll_fusey, lhy, hly, hhy], dim=1)
+
+            # dwtx = torch.cat([llx, lh_fuse, hl_fuse, hh_fuse], dim=1)
+            # dwty = torch.cat([lly, lh_fuse, hl_fuse, hh_fuse], dim=1)
+            idwtx = self.idwt(dwtx)
+            idwty = self.idwt(dwty)
+            idwtx = self.act(idwtx)
+            idwty = self.act(idwty)
+            idwtx = self.iconvx(idwtx)
+            idwty = self.iconvy(idwty)
+            x = blockx + idwtx * self.wx + idwty * (1 - self.wx)
+            y = blocky + idwty * self.wy + idwtx * (1 - self.wy)
+            return x, y
+        return blockx, blocky
 
 
 class ConvNeXtV2_unet(nn.Module):

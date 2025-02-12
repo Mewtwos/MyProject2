@@ -30,13 +30,13 @@ from convnextv2.helpers import DiceLoss, SoftCrossEntropyLoss
 from pynvml import *
 enable_custom_repr()
 
-use_wandb = True
+use_wandb = False
 if use_wandb:
     config = {
         "model": "MFFNet",
     }
     wandb.init(project="FTransUNet", config=config)
-    wandb.run.name = "convnextv2-tiny-Vaihingen-有权重-modify3(共享stage)-spa+lla+0.5diceloss+0.4auxloss+newfusion"
+    wandb.run.name = "convnextv2-tiny-whuDataset-有权重-modify3(共享stage)-spa+lla+0.5diceloss+0.4auxloss+newfusionblock"
     # wandb.run.name = "FTransUnet-Vaihingen-有权重2
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
@@ -85,23 +85,8 @@ torch.cuda.manual_seed_all(seed) #新增
 # net.load_from(weights=np.load(config_vit.pretrained_path))
 
 #convnextv2_unet_modify
-# net = convnextv2_unet_modify.__dict__["convnextv2_unet_tiny"](
-#             num_classes=6,
-#             drop_path_rate=0.1,
-#             head_init_scale=0.001,
-#             patch_size=16,  ###原来是16
-#             use_orig_stem=False,
-#             in_chans=3,
-#         ).cuda()
-# net = convnextv2_unet_modify2.__dict__["convnextv2_unet_tiny"](
-#             num_classes=6,
-#             drop_path_rate=0.1,
-#             patch_size=16,  
-#             use_orig_stem=False,
-#             in_chans=3,
-#         ).cuda()
 net = convnextv2_unet_modify3.__dict__["convnextv2_unet_tiny"](
-            num_classes=6,
+            num_classes=8,
             drop_path_rate=0.1,
             patch_size=16,  
             use_orig_stem=False,
@@ -168,93 +153,53 @@ print(params)
 if use_wandb:
     wandb.log({"params": params})
 
-print("training : ", train_ids)
-print("testing : ", test_ids)
-print("BATCH_SIZE: ", BATCH_SIZE)
-print("Stride Size: ", Stride_Size)
-train_set = ISPRS_dataset(train_ids, cache=CACHE)
-train_loader = torch.utils.data.DataLoader(train_set,batch_size=BATCH_SIZE)
+train_set = WHU_OPT_SARDataset(class_name='whu-opt-sar', root='/data/lvhaitao/dataset/whu-opt-sar/train')
+train_loader = torch.utils.data.DataLoader(train_set,batch_size=BATCH_SIZE, shuffle=True, num_workers=8, pin_memory=True)
+val_dataset = WHU_OPT_SARDataset(class_name='whu-opt-sar', root='/data/lvhaitao/dataset/whu-opt-sar/test')
+val_dataloader = torch.utils.data.DataLoader(dataset=val_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=8, pin_memory=True)
 
 optimizer = optim.AdamW(net.parameters(), lr=1e-4, weight_decay=0.0005)
 scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [25, 35, 45], gamma=0.1)
 
-def test(net, test_ids, all=False, stride=WINDOW_SIZE[0], batch_size=BATCH_SIZE, window_size=WINDOW_SIZE):
-    # Use the network on the test set
-    ## Potsdam
-    if DATASET == 'Potsdam':
-        test_images = (1 / 255 * np.asarray(io.imread(DATA_FOLDER.format(id))[:, :, :3], dtype='float32') for id in test_ids)
-        # test_images = (1 / 255 * np.asarray(io.imread(DATA_FOLDER.format(id))[:, :, (3, 0, 1, 2)][:, :, :3], dtype='float32') for id in test_ids)
-    ## Vaihingen
-    else:
-        test_images = (1 / 255 * np.asarray(io.imread(DATA_FOLDER.format(id)), dtype='float32') for id in test_ids)
-    test_dsms = (np.asarray(io.imread(DSM_FOLDER.format(id)), dtype='float32') for id in test_ids)
-    test_labels = (np.asarray(io.imread(LABEL_FOLDER.format(id)), dtype='uint8') for id in test_ids)
-    eroded_labels = (convert_from_color(io.imread(ERODED_FOLDER.format(id))) for id in test_ids)
-    all_preds = []
-    all_gts = []
-
-    # Switch the network to inference mode
+def test(net, val_dataloader):
     with torch.no_grad():
-        for img, dsm, gt, gt_e in tqdm(zip(test_images, test_dsms, test_labels, eroded_labels), total=len(test_ids), leave=False):
-            pred = np.zeros(img.shape[:2] + (N_CLASSES,))
-
-            total = count_sliding_window(img, step=stride, window_size=window_size) // batch_size
-            for i, coords in enumerate(
-                    tqdm(grouper(batch_size, sliding_window(img, step=stride, window_size=window_size)), total=total,
-                        leave=False)):
-                # Build the tensor
-                image_patches = [np.copy(img[x:x + w, y:y + h]).transpose((2, 0, 1)) for x, y, w, h in coords]
-                image_patches = np.asarray(image_patches)
-                image_patches = Variable(torch.from_numpy(image_patches).cuda(), volatile=True)
-
-                min = np.min(dsm)
-                max = np.max(dsm)
-                dsm = (dsm - min) / (max - min)
-                dsm_patches = [np.copy(dsm[x:x + w, y:y + h]) for x, y, w, h in coords]
-                dsm_patches = np.asarray(dsm_patches)
-                dsm_patches = Variable(torch.from_numpy(dsm_patches).cuda(), volatile=True)
-
-                # Do the inference
-                outs = net(image_patches, dsm_patches)
-                outs = outs.data.cpu().numpy()
-
-                # Fill in the results array
-                for out, (x, y, w, h) in zip(outs, coords):
-                    out = out.transpose((1, 2, 0))
-                    pred[x:x + w, y:y + h] += out
-                del (outs)
-
-            pred = np.argmax(pred, axis=-1)
-            all_preds.append(pred)
-            all_gts.append(gt_e)
-            clear_output()
-            
-    accuracy, mf1, miou, oa_dict = metrics(np.concatenate([p.ravel() for p in all_preds]),
-                       np.concatenate([p.ravel() for p in all_gts]).ravel())
-    if all:
-        return accuracy, all_preds, all_gts
-    else:
-        return accuracy, mf1, miou, oa_dict
+        pred = []
+        target = []
+        net.eval()
+        for idx, (sar, opt, label) in enumerate(tqdm(val_dataloader)):
+            sar = sar.cuda()  
+            opt = opt.cuda()
+            label = label.cpu().numpy()
+            outputs = net(opt, sar.squeeze(1))
+            final_class = torch.argmax(outputs, dim=1)
+            output = final_class.detach().cpu().numpy()
+            for out, gt in zip(output, label):
+                pred.append(out)
+                target.append(gt)
+        pred = np.concatenate([p.ravel() for p in pred])
+        target = np.concatenate([t.ravel() for t in target])
+        accuracy, mf1, miou, oa_dict = metrics(pred, target,
+                                               label_values=['background', 'farmland', 'city', 'village', 'water','forest', 'road', 'others'])
 
 
 def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1):
     losses = np.zeros(1000000)
     mean_losses = np.zeros(100000000)
     weights = weights.cuda()
-    diceloss = DiceLoss(smooth=0.05)
-    aux_loss = SoftCrossEntropyLoss(smooth_factor=0.05, ignore_index=255)
+    # diceloss = DiceLoss(smooth=0.05)
+    # aux_loss = SoftCrossEntropyLoss(smooth_factor=0.05, ignore_index=255)
 
     iter_ = 0
     acc_best = 89.0
     log_loss = 0
     for e in range(1, epochs + 1):
         net.train()
-        for batch_idx, (data, dsm, target) in enumerate(train_loader):
-            data, dsm, target = Variable(data.cuda()), Variable(dsm.cuda()), Variable(target.cuda())
+        for batch_idx, (sar, data, target) in enumerate(train_loader):
+            data, sar, target = Variable(data.cuda()), Variable(sar.cuda()), Variable(target.cuda())
             optimizer.zero_grad()
-            output, aux_out = net(data, dsm)
-            # loss = CrossEntropy2d(output, target, weight=weights)
-            loss = CrossEntropy2d(output, target, weight=weights) + 0.5 * diceloss(output, target) + 0.4 * aux_loss(aux_out, target)
+            output, aux_out = net(data, sar.squeeze(1))
+            loss = CrossEntropy2d(output, target)
+            # loss = CrossEntropy2d(output, target, weight=weights) + 0.5 * diceloss(output, target) + 0.4 * aux_loss(aux_out, target)
             loss.backward()
             optimizer.step()
 
@@ -262,7 +207,7 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
             log_loss += loss.item()
             mean_losses[iter_] = np.mean(losses[max(0, iter_ - 100):iter_])
 
-            if iter_ % 100 == 0:
+            if iter_ % 200 == 0:
                 clear_output()
                 # rgb = np.asarray(255 * np.transpose(data.data.cpu().numpy()[0], (1, 2, 0)), dtype='uint8')
                 pred = np.argmax(output.data.cpu().numpy()[0], axis=0)
@@ -277,12 +222,12 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
         if scheduler is not None:
             scheduler.step()
             current_lr = optimizer.param_groups[0]['lr']
-        if e > 20:
+        if e > 0:
             net.eval()
             acc, mf1, miou, oa_dict = test(net, test_ids, all=False, stride=Stride_Size)
             net.train()
             if acc > acc_best:
-                torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixall+newfusionblock)_Vaihingen_epoch{}_{}'.format(e, acc))
+                # torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixall1)_Vaihingen_epoch{}_{}'.format(e, acc))
                 acc_best = acc
             if use_wandb:
                 wandb.log({"epoch": e, "total_accuracy": acc, "train_loss": log_loss, "mF1": mf1, "mIoU": miou, "lr": current_lr, **oa_dict})
@@ -292,7 +237,7 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
 #####   train   ####
 time_start=time.time()
 train(net, optimizer, 50, scheduler)
-# test(net.eval(), test_ids, all=False, stride=Stride_Size)
+# test(net, val_dataloader)
 time_end=time.time()
 print('Total Time Cost: ',time_end-time_start)
 if use_wandb:
