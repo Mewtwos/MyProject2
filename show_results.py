@@ -12,7 +12,7 @@ from othermodel.Transunet import VisionTransformer as TransUNet
 from othermodel.ukan import UKAN
 from othermodel.unetformer import UNetFormer
 # from othermodel.rs3mamba import RS3Mamba, load_pretrained_ckpt
-from convnextv2 import convnextv2_unet_modify2
+from convnextv2 import convnextv2_unet_modify2, convnextv2_unet_modify3
 from othermodel.ACNet import ACNet
 from othermodel.RFNet import RFNet, resnet18
 from othermodel.ESANet import ESANet
@@ -29,9 +29,13 @@ dataset = "Vaihingen"
 # dataset = "Potsdam"
 
 if dataset == "Vaihingen":
-    index_dict = {"1":30, "2":30, "3":30, "4":30}
-    x_dict = {"1":2096, "2":1530, "3":510, "4":877}
-    y_dict = {"1":1441, "2":544, "3":1601, "4":1244}
+    # index_dict = {"1":30, "2":30, "3":30, "4":30}
+    # x_dict = {"1":2096, "2":1530, "3":510, "4":877}
+    # y_dict = {"1":1441, "2":544, "3":1601, "4":1244}
+    #test
+    index_dict = {"1":5, "2":30, "3":30, "4":30}
+    x_dict = {"1":1909, "2":1530, "3":510, "4":877}
+    y_dict = {"1":868, "2":544, "3":1601, "4":1244}
     dataset_dir = "/data/lvhaitao/dataset/Vaihingen/"
 else:
     index_dict = {"1":"4_10", "2":"3_10", "3":"3_10", "4":"3_10"}
@@ -99,7 +103,14 @@ for i in range(4):
 #             use_orig_stem=False,
 #             in_chans=3,
 #         ).cuda()
-# net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/MFFNet(test_in_train)_Vaihingen_epoch24_91.97493429597384"))
+net = convnextv2_unet_modify3.__dict__["convnextv2_unet_tiny"](
+            num_classes=6,
+            drop_path_rate=0.1,
+            patch_size=16,  ###原来是16
+            use_orig_stem=False,
+            in_chans=3,
+        ).cuda()
+net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixall1)_Vaihingen_epoch46_92.25605742836657"))
 # net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/MFFNet3_Potsdam_epoch29_90.97468546733342"))
 
 # net = RS3Mamba(num_classes=6).cuda()
@@ -134,13 +145,13 @@ for i in range(4):
 # net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/SAGate_Potsdam_epoch45_90.82541253543694"))
 
 #FTransUnet
-config_vit = CONFIGS_ViT_seg['R50-ViT-B_16']
-config_vit.n_classes = 6
-config_vit.n_skip = 3
-config_vit.patches.grid = (int(256 / 16), int(256 / 16))
-net = ViT_seg(config_vit, img_size=256, num_classes=6).cuda()
-net.load_from(weights=np.load(config_vit.pretrained_path))
-net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/FTransUnet_Vaihingen_epoch22_92.26214985850798"))
+# config_vit = CONFIGS_ViT_seg['R50-ViT-B_16']
+# config_vit.n_classes = 6
+# config_vit.n_skip = 3
+# config_vit.patches.grid = (int(256 / 16), int(256 / 16))
+# net = ViT_seg(config_vit, img_size=256, num_classes=6).cuda()
+# net.load_from(weights=np.load(config_vit.pretrained_path))
+# net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/FTransUnet_Vaihingen_epoch22_92.26214985850798"))
 
 
 net.eval()

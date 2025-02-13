@@ -94,9 +94,9 @@ class FusionBlock(nn.Module):
         self.iconvy = nn.Conv2d(dim // 4, dim, kernel_size=1, bias=False)
         self.wx = torch.nn.Parameter(torch.tensor(0.5), requires_grad=True)
         self.wy = torch.nn.Parameter(torch.tensor(0.5), requires_grad=True)
-        # self.cross_attnx = CrossAttention(dim//4)
-        # self.cross_attny = CrossAttention(dim//4)
-        # self.spatial_attn = SpatialAttention()
+        self.cross_attnx = CrossAttention(dim//4)
+        self.cross_attny = CrossAttention(dim//4)
+        self.spatial_attn = SpatialAttention()
 
     def forward(self, input) -> Tensor:
         x, y = input
@@ -112,22 +112,22 @@ class FusionBlock(nn.Module):
             hl_fuse = torch.max(hlx, hly)
             hh_fuse = torch.max(hhx, hhy)
             #spatial attention
-            # spatial_attn = self.spatial_attn(torch.cat([lhx, hlx, hhx, lhy, hly, hhy], dim=1))
-            # llx = llx * spatial_attn
-            # lly = lly * spatial_attn
-            # # cross attention
-            # llxf = llx.flatten(2).transpose(1, 2)
-            # llyf = lly.flatten(2).transpose(1, 2)
-            # ll_fusex = self.cross_attnx(llxf, llyf)
-            # ll_fusey = self.cross_attny(llyf, llxf)
-            # ll_fusex = ll_fusex.transpose(1, 2).view_as(llx)
-            # ll_fusey = ll_fusey.transpose(1, 2).view_as(lly)
+            spatial_attn = self.spatial_attn(torch.cat([lhx, hlx, hhx, lhy, hly, hhy], dim=1))
+            llx = llx * spatial_attn
+            lly = lly * spatial_attn
+            # cross attention
+            llxf = llx.flatten(2).transpose(1, 2)
+            llyf = lly.flatten(2).transpose(1, 2)
+            ll_fusex = self.cross_attnx(llxf, llyf)
+            ll_fusey = self.cross_attny(llyf, llxf)
+            ll_fusex = ll_fusex.transpose(1, 2).view_as(llx)
+            ll_fusey = ll_fusey.transpose(1, 2).view_as(lly)
 
-            # dwtx = torch.cat([ll_fusex, lhx, hlx, hhx], dim=1)
-            # dwty = torch.cat([ll_fusey, lhy, hly, hhy], dim=1)
+            dwtx = torch.cat([ll_fusex, lhx, hlx, hhx], dim=1)
+            dwty = torch.cat([ll_fusey, lhy, hly, hhy], dim=1)
 
-            dwtx = torch.cat([llx, lh_fuse, hl_fuse, hh_fuse], dim=1)
-            dwty = torch.cat([lly, lh_fuse, hl_fuse, hh_fuse], dim=1)
+            # dwtx = torch.cat([llx, lh_fuse, hl_fuse, hh_fuse], dim=1)
+            # dwty = torch.cat([lly, lh_fuse, hl_fuse, hh_fuse], dim=1)
             idwtx = self.idwt(dwtx)
             idwty = self.idwt(dwty)
             idwtx = self.iconvx(idwtx)

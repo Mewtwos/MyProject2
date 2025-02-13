@@ -30,13 +30,13 @@ from convnextv2.helpers import DiceLoss, SoftCrossEntropyLoss
 from pynvml import *
 enable_custom_repr()
 
-use_wandb = False
+use_wandb = True
 if use_wandb:
     config = {
         "model": "MFFNet",
     }
     wandb.init(project="FTransUNet", config=config)
-    wandb.run.name = "convnextv2-tiny-whuDataset-有权重-modify3(共享stage)-spa+lla+0.5diceloss+0.4auxloss+newfusionblock"
+    wandb.run.name = "convnextv2-tiny-whuDataset-有权重-modify3(共享stage)-lla+spa+0.5diceloss+0.4auxloss"
     # wandb.run.name = "FTransUnet-Vaihingen-有权重2
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
@@ -180,6 +180,7 @@ def test(net, val_dataloader):
         target = np.concatenate([t.ravel() for t in target])
         accuracy, mf1, miou, oa_dict = metrics(pred, target,
                                                label_values=['background', 'farmland', 'city', 'village', 'water','forest', 'road', 'others'])
+        return accuracy, mf1, miou, oa_dict
 
 
 def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1):
@@ -207,7 +208,7 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
             log_loss += loss.item()
             mean_losses[iter_] = np.mean(losses[max(0, iter_ - 100):iter_])
 
-            if iter_ % 200 == 0:
+            if iter_ % 500 == 0:
                 clear_output()
                 # rgb = np.asarray(255 * np.transpose(data.data.cpu().numpy()[0], (1, 2, 0)), dtype='uint8')
                 pred = np.argmax(output.data.cpu().numpy()[0], axis=0)
@@ -224,7 +225,7 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
             current_lr = optimizer.param_groups[0]['lr']
         if e > 0:
             net.eval()
-            acc, mf1, miou, oa_dict = test(net, test_ids, all=False, stride=Stride_Size)
+            acc, mf1, miou, oa_dict = test(net, val_dataloader)
             net.train()
             if acc > acc_best:
                 # torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixall1)_Vaihingen_epoch{}_{}'.format(e, acc))
