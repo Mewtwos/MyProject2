@@ -30,23 +30,16 @@ from convnextv2.helpers import DiceLoss, SoftCrossEntropyLoss, FocalLoss
 from pynvml import *
 enable_custom_repr()
 
-use_wandb = False
-if use_wandb:
-    config = {
-        "model": "MFFNet",
-    }
-    wandb.init(project="FTransUNet", config=config)
-    wandb.run.name = "convnextv2-tiny-Potsdam-有权重-modify3(共享stage)-spa+lla+0.5diceloss+0.4auxloss+seed=0"
-    # wandb.run.name = "FTransUnet-Vaihingen-有权重2
+#微调参数：
+train_ids = ['30']
+test_ids = ['30']
+epoch = 1
+DATASET = 'Vaihingen'
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 torch.cuda.device_count.cache_clear() 
-nvmlInit()
-handle = nvmlDeviceGetHandleByIndex(int(os.environ["CUDA_VISIBLE_DEVICES"]))
-print("Device :", nvmlDeviceGetName(handle))
 
-# seed = 3407
-seed = 0
+seed = 3407
 torch.manual_seed(seed)
 random.seed(seed)  #新增
 np.random.seed(seed)
@@ -115,8 +108,8 @@ net = convnextv2_unet_modify3.__dict__["convnextv2_unet_tiny"](
 #             use_orig_stem=False,
 #             in_chans=3,
 #         ).cuda()
-net = load_imagenet_checkpoint(net, "/home/lvhaitao/pretrained_model/convnextv2_tiny_1k_224_fcmae.pt")
-print("预训练权重加载完成")
+net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixall1)_Vaihingen_epoch47_92.25891413887855"))
+print("权重加载完成")
 
 #MAResUNet
 #net = MAResUNet(num_classes=6).cuda()
@@ -161,13 +154,6 @@ print("预训练权重加载完成")
 # net = DeepLab(6, pretrained_model=pretrained_model, norm_layer=nn.BatchNorm2d).cuda()
 # init_weight(net.business_layer, nn.init.kaiming_normal_,nn.BatchNorm2d, 1e-5, 0.1,mode='fan_in', nonlinearity='relu')
 
-
-params = 0
-for name, param in net.named_parameters():
-    params += param.nelement()
-print(params)
-if use_wandb:
-    wandb.log({"params": params})
 
 print("training : ", train_ids)
 print("testing : ", test_ids)
@@ -244,6 +230,7 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
     weights = weights.cuda()
     diceloss = DiceLoss(smooth=0.05)
     aux_loss = SoftCrossEntropyLoss(smooth_factor=0.05, ignore_index=255)
+    # focalloss = FocalLoss(gamma=2, alpha=weights)
 
     iter_ = 0
     acc_best = 89.0
@@ -256,6 +243,9 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
             output, aux_out = net(data, dsm)
             # loss = CrossEntropy2d(output, target, weight=weights)
             loss = CrossEntropy2d(output, target, weight=weights) + 0.5 * diceloss(output, target) + 0.4 * aux_loss(aux_out, target)
+            # loss = focalloss(output, target) + 0.5 * diceloss(output, target) + 0.4 * aux_loss(aux_out, target)
+            # ref_loss = CrossEntropy2d(ref_out, target, weight=weights) + 0.5 * diceloss(ref_out, target)
+            # loss = loss + ref_loss
             loss.backward()
             optimizer.step()
 
@@ -278,24 +268,20 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
         if scheduler is not None:
             scheduler.step()
             current_lr = optimizer.param_groups[0]['lr']
-        if e > 20:
+        if e > 0:
             net.eval()
             acc, mf1, miou, oa_dict = test(net, test_ids, all=False, stride=Stride_Size)
             net.train()
             if acc > acc_best:
-                torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixlall+seed=0)_Potsdam_epoch{}_{}'.format(e, acc))
+                torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixall+finetune)_Vaihingen_epoch{}_{}'.format(e, acc))
                 acc_best = acc
-            if use_wandb:
-                wandb.log({"epoch": e, "total_accuracy": acc, "train_loss": log_loss, "mF1": mf1, "mIoU": miou, "lr": current_lr, **oa_dict})
             log_loss = 0
     print('acc_best: ', acc_best)
 
 #####   train   ####
 time_start=time.time()
-train(net, optimizer, 50, scheduler)
+train(net, optimizer, epoch, scheduler)
 # test(net.eval(), test_ids, all=False, stride=Stride_Size)
 time_end=time.time()
 print('Total Time Cost: ',time_end-time_start)
-if use_wandb:
-    wandb.finish()
 
