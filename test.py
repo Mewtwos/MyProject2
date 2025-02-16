@@ -1,70 +1,88 @@
-import os
 from PIL import Image
+# from matplotlib import pyplot as plt
 import numpy as np
 import torch
-from convnextv2 import convnextv2_unet_modify2
-import torch.nn as nn
+from utils import convert_from_color
+from othermodel.ABCNet import ABCNet
 from skimage import io
-from custom_repr import enable_custom_repr
-enable_custom_repr()
+from othermodel.CMFNet import CMFNet
+from othermodel.CMGFNet import FuseNet
+from othermodel.MAResUNet import MAResUNet
+# from othermodel.Transunet import CONFIGS as CONFIGS_ViT_seg
+from othermodel.Transunet import VisionTransformer as TransUNet
+from othermodel.ukan import UKAN
+from othermodel.unetformer import UNetFormer
+# from othermodel.rs3mamba import RS3Mamba
+from convnextv2 import convnextv2_unet_modify2, convnextv2_unet_modify3
+import torch.optim as optim
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-torch.cuda.device_count.cache_clear() 
 
-dataset_dir = "/data/lvhaitao/dataset/Potsdam/"
-index = "4_10"
-data = io.imread(dataset_dir+'4_Ortho_RGBIR/top_potsdam_{}_RGBIR.tif'.format(index))[:, :, :3].transpose((2, 0, 1))
-data = 1 / 255 * np.asarray(data, dtype='float32')
-dsm = np.asarray(io.imread(dataset_dir+'1_DSM_normalisation/dsm_potsdam_{}_normalized_lastools.jpg'.format(index)), dtype='float32')
-min = np.min(dsm)
-max = np.max(dsm)
-dsm = (dsm - min) / (max - min)
-data = torch.from_numpy(data).unsqueeze(0).cuda()
-dsm = torch.from_numpy(dsm).unsqueeze(0).cuda()
+vaihingen_data = {}
+vaihingen_dsm = {}
+vaihingen_label = {}
+patch_size = 256
+# dataset = "Vaihingen"
+dataset = "Potsdam"
 
-net = convnextv2_unet_modify2.__dict__["convnextv2_unet_tiny"](
+if dataset == "Vaihingen":
+    # index_dict = {"1":30, "2":30, "3":30, "4":30}
+    # x_dict = {"1":2096, "2":1530, "3":510, "4":877}
+    # y_dict = {"1":1441, "2":544, "3":1601, "4":1244}
+    #test
+    index_dict = {"1":15, "2":15}
+    x_dict = {"1":822, "2":277}
+    y_dict = {"1":1150, "2":1133}
+    dataset_dir = "/data/lvhaitao/dataset/Vaihingen/"
+else:
+    # index_dict = {"1":"4_10", "2":"3_10", "3":"3_10", "4":"3_10"}
+    # x_dict = {"1":3226, "2":853, "3":3406, "4":4747}
+    # y_dict = {"1":3413, "2":5138, "3":2800, "4":2231}
+    # index_dict = {"1":"3_10", "2":"3_10", "3":"3_10", "4":"3_10"}
+    # x_dict = {"1":3828, "2":4716, "3":3406, "4":4747}
+    # y_dict = {"1":4411, "2":5647, "3":2800, "4":2231}
+    index_dict = {"1":"4_10", "2":"3_10", "3":"3_10", "4":"3_10"}
+    x_dict = {"1":4934, "2":4716, "3":3406, "4":4747}
+    y_dict = {"1":4816, "2":5647, "3":2800, "4":2231}
+    dataset_dir = "/data/lvhaitao/dataset/Potsdam/"
+
+for i in range(2):
+    x1 = x_dict[str(i+1)]
+    y1 = y_dict[str(i+1)]
+    x2 = x1 + patch_size
+    y2 = y1 + patch_size
+    index = index_dict[str(i+1)]
+    if dataset == "Vaihingen":
+        data = io.imread(dataset_dir+'top/top_mosaic_09cm_area{}.tif'.format(index))
+        data = 1 / 255 * np.asarray(data.transpose((2, 0, 1)), dtype='float32')
+        dsm = np.asarray(io.imread(dataset_dir+'dsm/dsm_09cm_matching_area{}.tif'.format(index)), dtype='float32')
+    else:
+        data = io.imread(dataset_dir+'4_Ortho_RGBIR/top_potsdam_{}_RGBIR.tif'.format(index))[:, :, :3].transpose((2, 0, 1))
+        data = 1 / 255 * np.asarray(data, dtype='float32')
+        dsm = np.asarray(io.imread(dataset_dir+'1_DSM_normalisation/dsm_potsdam_{}_normalized_lastools.jpg'.format(index)), dtype='float32')
+    min = np.min(dsm)
+    max = np.max(dsm)
+    dsm = (dsm - min) / (max - min)
+    label = np.asarray(convert_from_color(io.imread('5_Labels_for_participants/top_potsdam_{}_label.tif')), dtype='int64')
+
+    label_p = label[x1:x2, y1:y2]
+    data_p = data[:, x1:x2, y1:y2]
+    dsm_p = dsm[x1:x2, y1:y2]
+    vaihingen_data[str(i+1)] = data_p
+    vaihingen_dsm[str(i+1)] = dsm_p
+    vaihingen_label[str(i+1)] = label_p
+
+
+net = convnextv2_unet_modify3.__dict__["convnextv2_unet_tiny"](
             num_classes=6,
             drop_path_rate=0.1,
-            head_init_scale=0.001,
             patch_size=16,  ###原来是16
             use_orig_stem=False,
             in_chans=3,
         ).cuda()
-# net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/MFFNet3_Vaihingen_epoch5_91.7385402774969"))
-net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/MFFNet2_Potsdam_epoch46_91.16632234306633"))
+# net.load_state_dict(torch.load("/home/lvhaitao/finetune/MFFNet(mixall)"))
+# net.load_state_dict(torch.load("/home/lvhaitao/finetune/mffnet_potsdam"))
+net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixlall+seed=20)_Potsdam_epoch32_90.47994674184432"))
 
-net.eval()
 
-def decode_segmentation(output, palette):
-    # 获取每个像素的类别索引，形状为 [b, 256, 256]
-    output_class = torch.argmax(output, dim=1)  # 选择每个像素的最大类别
 
-    # 创建一个空的 RGB 图像，形状为 [b, 256, 256, 3]
-    decoded_images = torch.zeros((output_class.size(0), output_class.size(1), output_class.size(2), 3), dtype=torch.uint8)
-
-    # 将每个类别的颜色填充到图像中
-    for class_idx, color in palette.items():
-        mask = (output_class == class_idx)
-        decoded_images[mask] = torch.tensor(color, dtype=torch.uint8)
-
-    return decoded_images
-
-palette = {0 : (255, 255, 255), # Impervious surfaces (white)
-           1 : (0, 0, 255),     # Buildings (blue)
-           2 : (0, 255, 255),   # Low vegetation (cyan)
-           3 : (0, 255, 0),     # Trees (green)
-           4 : (255, 255, 0),   # Cars (yellow)
-           5 : (255, 0, 0),     # Clutter (red)
-        #    6 : (0, 0, 0)
-           }       # Undefined (black)
-
-with torch.no_grad():
-    output = net(data, dsm)
-decoded_output = decode_segmentation(output, palette)
-#转为numpy
-decoded_output = decoded_output.squeeze().cpu().numpy().astype(np.uint8)
-image = Image.fromarray(decoded_output)
-image.save("/home/lvhaitao/label_big.png")
-
-print("结束")
 

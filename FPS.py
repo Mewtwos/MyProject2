@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import time
 from torch import nn
-from convnextv2 import convnextv2_unet_modify2
+from convnextv2 import convnextv2_unet_modify3
 from othermodel.ESANet import ESANet
 from othermodel.CMFNet import CMFNet
 # from othermodel.rs3mamba import RS3Mamba
@@ -127,10 +127,9 @@ class FPSBenchmark():
 
 if __name__ == '__main__':
     # net = FuseNet(num_classes=6, pretrained=False)
-    net = convnextv2_unet_modify2.__dict__["convnextv2_unet_tiny"](
+    net = convnextv2_unet_modify3.__dict__["convnextv2_unet_tiny"](
             num_classes=6,
             drop_path_rate=0.1,
-            head_init_scale=0.001,
             patch_size=16,  
             use_orig_stem=False,
             in_chans=3,

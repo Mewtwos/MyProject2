@@ -26,17 +26,17 @@ from othermodel.ESANet import ESANet
 from othermodel.ACNet import ACNet
 from othermodel.SAGate import DeepLab, init_weight
 from custom_repr import enable_custom_repr
-from convnextv2.helpers import DiceLoss, SoftCrossEntropyLoss, FocalLoss
+from convnextv2.helpers import DiceLoss, SoftCrossEntropyLoss
 from pynvml import *
 enable_custom_repr()
 
-use_wandb = False
+use_wandb = True
 if use_wandb:
     config = {
         "model": "MFFNet",
     }
     wandb.init(project="FTransUNet", config=config)
-    wandb.run.name = "convnextv2-tiny-Potsdam-有权重-modify3(共享stage)-spa+lla+0.5diceloss+0.4auxloss+seed=0"
+    wandb.run.name = "convnextv2-tiny-Potsdam-有权重-modify3(共享stage)-spa+lla+0.4auxloss"
     # wandb.run.name = "FTransUnet-Vaihingen-有权重2
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
@@ -45,8 +45,8 @@ nvmlInit()
 handle = nvmlDeviceGetHandleByIndex(int(os.environ["CUDA_VISIBLE_DEVICES"]))
 print("Device :", nvmlDeviceGetName(handle))
 
-# seed = 3407
-seed = 0
+seed = 3407
+# seed = 20
 torch.manual_seed(seed)
 random.seed(seed)  #新增
 np.random.seed(seed)
@@ -104,7 +104,7 @@ torch.cuda.manual_seed_all(seed) #新增
 net = convnextv2_unet_modify3.__dict__["convnextv2_unet_tiny"](
             num_classes=6,
             drop_path_rate=0.1,
-            patch_size=16,  
+            patch_size=16,
             use_orig_stem=False,
             in_chans=3,
         ).cuda()
@@ -255,7 +255,8 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
             optimizer.zero_grad()
             output, aux_out = net(data, dsm)
             # loss = CrossEntropy2d(output, target, weight=weights)
-            loss = CrossEntropy2d(output, target, weight=weights) + 0.5 * diceloss(output, target) + 0.4 * aux_loss(aux_out, target)
+            # loss = CrossEntropy2d(output, target, weight=weights) + 0.5 * diceloss(output, target) + 0.4 * aux_loss(aux_out, target)
+            loss = CrossEntropy2d(output, target, weight=weights) + 0.4 * aux_loss(aux_out, target)
             loss.backward()
             optimizer.step()
 

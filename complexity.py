@@ -3,7 +3,7 @@ import torch
 from torch import nn
 from thop import profile
 from thop import clever_format
-from convnextv2 import convnextv2_unet_modify2
+from convnextv2 import convnextv2_unet_modify3
 from othermodel.ESANet import ESANet
 from othermodel.CMFNet import CMFNet
 # from othermodel.rs3mamba import RS3Mamba
@@ -16,10 +16,9 @@ from othermodel.ACNet import ACNet
 from othermodel.CMGFNet import FuseNet
 
 # 创建模型实例
-net = convnextv2_unet_modify2.__dict__["convnextv2_unet_tiny"](
+net = convnextv2_unet_modify3.__dict__["convnextv2_unet_tiny"](
             num_classes=6,
             drop_path_rate=0.1,
-            head_init_scale=0.001,
             patch_size=16,  
             use_orig_stem=False,
             in_chans=3,

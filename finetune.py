@@ -6,14 +6,14 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.optim.lr_scheduler
 import torch.nn.init
+from othermodel.CMGFNet import FuseNet
 from utils import *
 from torch.autograd import Variable
 from IPython.display import clear_output
 from model.vitcross_seg_modeling import VisionTransformer as ViT_seg
 from model.vitcross_seg_modeling import CONFIGS as CONFIGS_ViT_seg
 import wandb
-# from othermodel.ukan import UKAN
-# from othermodel.CMFNet import CMFNet
+from othermodel.CMFNet import CMFNet
 # from othermodel.rs3mamba import RS3Mamba, load_pretrained_ckpt
 from othermodel.Transunet import VisionTransformer as TransUNet
 # from othermodel.Transunet import CONFIGS as CONFIGS_ViT_seg
@@ -26,15 +26,14 @@ from othermodel.ESANet import ESANet
 from othermodel.ACNet import ACNet
 from othermodel.SAGate import DeepLab, init_weight
 from custom_repr import enable_custom_repr
-from convnextv2.helpers import DiceLoss, SoftCrossEntropyLoss, FocalLoss
+from convnextv2.helpers import DiceLoss, SoftCrossEntropyLoss
 from pynvml import *
 enable_custom_repr()
 
 #微调参数：
-train_ids = ['30']
-test_ids = ['30']
+train_ids = ['3_10']
+test_ids = ['3_10']
 epoch = 1
-DATASET = 'Vaihingen'
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 torch.cuda.device_count.cache_clear() 
@@ -45,38 +44,17 @@ random.seed(seed)  #新增
 np.random.seed(seed)
 torch.cuda.manual_seed_all(seed) #新增
 
+#CMGFNet
+# net = FuseNet(num_classes=6, pretrained=False).cuda()
+# net.load_state_dict(torch.load("/home/lvhaitao/vaihingenmodel/CMGFNet_epoch22_91"))
+
 #CMFNet
 # net = CMFNet().cuda()
-# vgg16_weights = torch.load('vgg16_bn-6c64b313.pth')
-# mapped_weights = {}
-# for k_vgg, k_segnet in zip(vgg16_weights.keys(), net.state_dict().keys()):
-#     if "features" in k_vgg:
-#         mapped_weights[k_segnet] = vgg16_weights[k_vgg]
-
-# for it in net.state_dict().keys():
-#     if it == 'conv1_1_d.weight':
-#         avg = torch.mean(mapped_weights[it.replace('_d', '')].data, dim=1)
-#         mapped_weights[it] = avg.unsqueeze(1)
-#     if '_d' in it and it != 'conv1_1_d.weight':
-#         if it.replace('_d', '') in mapped_weights:
-#             mapped_weights[it] = mapped_weights[it.replace('_d', '')]
-# try:
-#     net.load_state_dict(mapped_weights)
-#     print("Loaded VGG-16 weights in SegNet !")
-# except:
-#     pass
+# net.load_state_dict(torch.load("/home/lvhaitao/vaihingenmodel/CMFNet_epoch36_90"))
 
 #rs3mamba
 # net = RS3Mamba(num_classes=N_CLASSES).cuda()
 # net = load_pretrained_ckpt(net)
-
-#TransUNet
-# config_vit = CONFIGS_ViT_seg['R50-ViT-B_16']
-# config_vit.n_classes = 6
-# config_vit.n_skip = 3
-# config_vit.patches.grid = (14, 14)
-# net = TransUNet(config_vit, 256, 6).cuda()
-# net.load_from(weights=np.load(config_vit.pretrained_path))
 
 #convnextv2_unet_modify
 # net = convnextv2_unet_modify.__dict__["convnextv2_unet_tiny"](
@@ -101,15 +79,9 @@ net = convnextv2_unet_modify3.__dict__["convnextv2_unet_tiny"](
             use_orig_stem=False,
             in_chans=3,
         ).cuda()
-# net = convnextv2_unet_modify4.__dict__["convnextv2_unet_tiny"](
-#             num_classes=6,
-#             drop_path_rate=0.1,
-#             patch_size=16,  
-#             use_orig_stem=False,
-#             in_chans=3,
-#         ).cuda()
-net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixall1)_Vaihingen_epoch47_92.25891413887855"))
-print("权重加载完成")
+# net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixall1)_Vaihingen_epoch47_92.25891413887855"))
+net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixlall+seed=20)_Potsdam_epoch32_90.47994674184432"))
+
 
 #MAResUNet
 #net = MAResUNet(num_classes=6).cuda()
@@ -145,14 +117,17 @@ print("权重加载完成")
 #     channels_decoder=[512, 256, 128],
 #     upsampling="learned-3x3-zeropad"
 # ).cuda()
+# net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/ESANet_Vaihingen_epoch33_91.59446590120024"))
 
 # ACNet
-# net = ACNet(num_class=6, pretrained=True).cuda()
+# net = ACNet(num_class=6, pretrained=False).cuda()
+# net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/ACNet_Vaihingen_epoch31_91.61899401363584"))
 
 # SAGate
 # pretrained_model = '/home/lvhaitao/resnet101_v1c.pth'
 # net = DeepLab(6, pretrained_model=pretrained_model, norm_layer=nn.BatchNorm2d).cuda()
 # init_weight(net.business_layer, nn.init.kaiming_normal_,nn.BatchNorm2d, 1e-5, 0.1,mode='fan_in', nonlinearity='relu')
+# net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/SAGate_Vaihingen_epoch42_91.72787145368382"))
 
 
 print("training : ", train_ids)
@@ -241,11 +216,9 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
             data, dsm, target = Variable(data.cuda()), Variable(dsm.cuda()), Variable(target.cuda())
             optimizer.zero_grad()
             output, aux_out = net(data, dsm)
-            # loss = CrossEntropy2d(output, target, weight=weights)
             loss = CrossEntropy2d(output, target, weight=weights) + 0.5 * diceloss(output, target) + 0.4 * aux_loss(aux_out, target)
-            # loss = focalloss(output, target) + 0.5 * diceloss(output, target) + 0.4 * aux_loss(aux_out, target)
-            # ref_loss = CrossEntropy2d(ref_out, target, weight=weights) + 0.5 * diceloss(ref_out, target)
-            # loss = loss + ref_loss
+            # output = net(data, dsm)
+            # loss = CrossEntropy2d(output, target, weight=weights)
             loss.backward()
             optimizer.step()
 
@@ -268,14 +241,15 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
         if scheduler is not None:
             scheduler.step()
             current_lr = optimizer.param_groups[0]['lr']
-        if e > 0:
-            net.eval()
-            acc, mf1, miou, oa_dict = test(net, test_ids, all=False, stride=Stride_Size)
-            net.train()
-            if acc > acc_best:
-                torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixall+finetune)_Vaihingen_epoch{}_{}'.format(e, acc))
-                acc_best = acc
-            log_loss = 0
+        torch.save(net.state_dict(), '/home/lvhaitao/finetune/mffnet_potsdam')
+        # if e > 0:
+        #     net.eval()
+        #     acc, mf1, miou, oa_dict = test(net, test_ids, all=False, stride=Stride_Size)
+        #     net.train()
+        #     if acc > acc_best:
+        #         torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixall+finetune)_Vaihingen_epoch{}_{}'.format(e, acc))
+        #         acc_best = acc
+        #     log_loss = 0
     print('acc_best: ', acc_best)
 
 #####   train   ####

@@ -11,7 +11,7 @@ from othermodel.MAResUNet import MAResUNet
 from othermodel.Transunet import VisionTransformer as TransUNet
 from othermodel.ukan import UKAN
 from othermodel.unetformer import UNetFormer
-# from othermodel.rs3mamba import RS3Mamba, load_pretrained_ckpt
+# from othermodel.rs3mamba import RS3Mamba
 from convnextv2 import convnextv2_unet_modify2, convnextv2_unet_modify3
 from othermodel.ACNet import ACNet
 from othermodel.RFNet import RFNet, resnet18
@@ -25,25 +25,31 @@ from model.vitcross_seg_modeling import CONFIGS as CONFIGS_ViT_seg
 vaihingen_data = {}
 vaihingen_dsm = {}
 patch_size = 256
-dataset = "Vaihingen"
-# dataset = "Potsdam"
+# dataset = "Vaihingen"
+dataset = "Potsdam"
 
 if dataset == "Vaihingen":
     # index_dict = {"1":30, "2":30, "3":30, "4":30}
     # x_dict = {"1":2096, "2":1530, "3":510, "4":877}
     # y_dict = {"1":1441, "2":544, "3":1601, "4":1244}
     #test
-    index_dict = {"1":5, "2":30, "3":30, "4":30}
-    x_dict = {"1":1909, "2":1530, "3":510, "4":877}
-    y_dict = {"1":868, "2":544, "3":1601, "4":1244}
+    index_dict = {"1":15, "2":15}
+    x_dict = {"1":822, "2":277}
+    y_dict = {"1":1150, "2":1133}
     dataset_dir = "/data/lvhaitao/dataset/Vaihingen/"
 else:
-    index_dict = {"1":"4_10", "2":"3_10", "3":"3_10", "4":"3_10"}
-    x_dict = {"1":3226, "2":853, "3":3406, "4":4747}
-    y_dict = {"1":3413, "2":5138, "3":2800, "4":2231}
+    # index_dict = {"1":"4_10", "2":"3_10", "3":"3_10", "4":"3_10"}
+    # x_dict = {"1":3226, "2":853, "3":3406, "4":4747}
+    # y_dict = {"1":3413, "2":5138, "3":2800, "4":2231}
+    # index_dict = {"1":"3_10", "2":"3_10", "3":"3_10", "4":"3_10"}
+    # x_dict = {"1":3828, "2":4716, "3":3406, "4":4747}
+    # y_dict = {"1":4411, "2":5647, "3":2800, "4":2231}
+    index_dict = {"1":"3_10", "2":"3_10", "3":"3_10", "4":"3_10"}
+    x_dict = {"1":3690, "2":4716, "3":3406, "4":4747}
+    y_dict = {"1":3733, "2":5647, "3":2800, "4":2231}
     dataset_dir = "/data/lvhaitao/dataset/Potsdam/"
 
-for i in range(4):
+for i in range(2):
     x1 = x_dict[str(i+1)]
     y1 = y_dict[str(i+1)]
     x2 = x1 + patch_size
@@ -68,28 +74,19 @@ for i in range(4):
 
 
 # net = ABCNet(6).cuda()
-# net.load_state_dict(torch.load("E:/训练的模型/Vaingen/ABCNet_epoch34_91.37813089108155"))
+# net.load_state_dict(torch.load("/home/lvhaitao/vaihingenmodel/ABCNet_epoch34_91"))
+# net.load_state_dict(torch.load("/home/lvhaitao/vaihingenmodel/ABCNet_epoch34_91"))
 
 # net = CMFNet().cuda()
-# net.load_state_dict(torch.load("E:/训练的模型/Vaingen/CMFNet_epoch36_90.6976907313886"))
+# net.load_state_dict(torch.load("/home/lvhaitao/finetune/cmfnet_vaihingen"))
 
+#CMGFNet
 # net = FuseNet(num_classes=6, pretrained=False).cuda()
-# net.load_state_dict(torch.load("E:/训练的模型/Vaingen/CMGFNet_epoch22_91.98291064860057"))
+# net.load_state_dict(torch.load("/home/lvhaitao/finetune/cmgfnet_vaihingen"))
 
 # net = MAResUNet(num_classes=6).cuda()
 # net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/MAResUNet_epoch45_90.66164015953017"))
-# net.load_state_dict(torch.load("E:/训练的模型/Vaingen/MARESUNET_epoch33_91.5188960086663"))
-
-# config_vit = CONFIGS_ViT_seg['R50-ViT-B_16']
-# config_vit.n_classes = 6
-# config_vit.n_skip = 3
-# config_vit.patches.grid = (14, 14)
-# net = TransUNet(config_vit, 256, 6).cuda()
-# net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/TransUNet_epoch47_90.94132738005878"))
-# net.load_state_dict(torch.load("E:/训练的模型/Vaingen/transunet_epoch46_91.49426607288572"))
-
-# net = UKAN(num_classes=6, input_h=256, input_w=256, deep_supervision=False, embed_dims=[128, 160, 256], no_kan=False).cuda()
-# net.load_state_dict(torch.load("E:/训练的模型/Vaingen/UKAN_epoch47_90.2728950498298"))
+# net.load_state_dict(torch.load("/home/lvhaitao/vaihingenmodel/maresunet_epoch33_91"))
 
 # net = UNetFormer(num_classes=6,pretrained=False).cuda()
 # net.load_state_dict(torch.load("/home/lvhaitao/unetformer_epoch50_91.6432166560365"))
@@ -110,17 +107,20 @@ net = convnextv2_unet_modify3.__dict__["convnextv2_unet_tiny"](
             use_orig_stem=False,
             in_chans=3,
         ).cuda()
-net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixall1)_Vaihingen_epoch46_92.25605742836657"))
-# net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/MFFNet3_Potsdam_epoch29_90.97468546733342"))
+# net.load_state_dict(torch.load("/home/lvhaitao/finetune/MFFNet(mixall)"))
+# net.load_state_dict(torch.load("/home/lvhaitao/finetune/mffnet_potsdam"))
+net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixlall+seed=20)_Potsdam_epoch32_90.47994674184432"))
 
 # net = RS3Mamba(num_classes=6).cuda()
-# net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/RS3mamba_epoch45_90.393848321926"))
+# net.load_state_dict(torch.load("/home/lvhaitao/vaihingenmodel/rs3mamba_epoch32_91"))
 
 # net = ACNet(num_class=6, pretrained=False).cuda()
 # net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/ACNet_Potsdam_epoch31_90.75246544602247"))
+# net.load_state_dict(torch.load("/home/lvhaitao/finetune/acnet_vaihingen"))
 
 # resnet = resnet18(pretrained=False, efficient=False, use_bn=True)
 # net = RFNet(resnet, num_classes=6, use_bn=True).cuda()
+# net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/RFNet_Vaihingen_epoch32_91.01867185588603"))
 # net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/RFNet_Potsdam_epoch50_90.092240556577"))
 
 # net = ESANet(
@@ -136,6 +136,7 @@ net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/testsavemodel/MFFNet(m
 #     channels_decoder=[512, 256, 128],
 #     upsampling="learned-3x3-zeropad"
 # ).cuda()
+# net.load_state_dict(torch.load("/home/lvhaitao/finetune/esanet_vaihingen"))
 # net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/ESANet_Potsdam_epoch48_90.59305027659295"))
 
 #SAGate
@@ -143,6 +144,7 @@ net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/testsavemodel/MFFNet(m
 # net = DeepLab(6, pretrained_model=pretrained_model, norm_layer=nn.BatchNorm2d).cuda()
 # init_weight(net.business_layer, nn.init.kaiming_normal_,nn.BatchNorm2d, 1e-5, 0.1,mode='fan_in', nonlinearity='relu')
 # net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/SAGate_Potsdam_epoch45_90.82541253543694"))
+# net.load_state_dict(torch.load("/home/lvhaitao/finetune/sagate_vaihingen"))
 
 #FTransUnet
 # config_vit = CONFIGS_ViT_seg['R50-ViT-B_16']
@@ -179,7 +181,7 @@ palette = {0 : (255, 255, 255), # Impervious surfaces (white)
         #    6 : (0, 0, 0)
            }       # Undefined (black)
 
-for i in range(4):
+for i in range(2):
     with torch.no_grad():
         data = torch.from_numpy(vaihingen_data[str(i+1)]).unsqueeze(0).cuda()
         dsm = torch.from_numpy(vaihingen_dsm[str(i+1)]).unsqueeze(0).cuda()
