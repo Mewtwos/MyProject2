@@ -361,7 +361,7 @@ class UNetFormer(nn.Module):
         super().__init__()
 
         self.backbone = timm.create_model(backbone_name, features_only=True, output_stride=32,
-                                          pretrained_cfg_overlay=dict(file="/home/lvhaitao/unetformer.pth"),
+                                          pretrained_cfg_overlay=dict(file="/home/lvhaitao/pretrained_model/unetformer.pth"),
                                           out_indices=(1, 2, 3, 4), pretrained=pretrained)
         encoder_channels = self.backbone.feature_info.channels()
 

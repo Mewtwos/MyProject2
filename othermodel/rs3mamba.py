@@ -984,7 +984,7 @@ class RS3Mamba(nn.Module):
 
 def load_pretrained_ckpt(
     model, 
-    ckpt_path="/home/lvhaitao/vmamba_tiny_e292.pth"
+    ckpt_path="/home/lvhaitao/pretrained_model/vmamba_tiny_e292.pth"
 ):
     
     print(f"Loading weights from: {ckpt_path}")

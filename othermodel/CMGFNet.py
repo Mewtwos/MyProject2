@@ -306,7 +306,8 @@ class FuseNet(nn.Module):
         final_dsm = self.final_dsm(out_dsm6)
         
 
-        return final_fused, final_rgb, final_dsm
+        # return final_fused, final_rgb, final_dsm
+        return final_fused
 
 
 # if __name__ == '__main__':

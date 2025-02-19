@@ -16,7 +16,7 @@ from othermodel.CMFNet import CMFNet
 # from othermodel.rs3mamba import RS3Mamba, load_pretrained_ckpt
 from othermodel.Transunet import VisionTransformer as TransUNet
 # from othermodel.Transunet import CONFIGS as CONFIGS_ViT_seg
-from convnextv2 import convnextv2_unet_modify, convnextv2_unet_modify2, convnextv2_unet_modify3, convnextv2_unet_modify4
+from convnextv2 import convnextv2_unet_modify3, convnextv2_unet_modify4
 from othermodel.MAResUNet import MAResUNet
 from othermodel.ABCNet import ABCNet
 from convnextv2.helpers import load_custom_checkpoint, load_imagenet_checkpoint
@@ -31,26 +31,19 @@ from othermodel.CMGFNet import FuseNet
 from pynvml import *
 enable_custom_repr()
 
-use_wandb = True
-if use_wandb:
-    config = {
-        "model": "MFFNet",
-    }
-    wandb.init(project="FTransUNet", config=config)
-    wandb.run.name = "convnextv2-tiny-whuDataset-有权重-modify3(共享stage)-spa+lla+0.5diceloss+0.4auxloss-随机seed2"
-    # wandb.run.name = "SAGATE-WHU"
+epoch=3
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 torch.cuda.device_count.cache_clear() 
 nvmlInit()
 handle = nvmlDeviceGetHandleByIndex(int(os.environ["CUDA_VISIBLE_DEVICES"]))
 print("Device :", nvmlDeviceGetName(handle))
 
-# seed = 3407
-# torch.manual_seed(seed)
-# random.seed(seed)  #新增
-# np.random.seed(seed)
-# torch.cuda.manual_seed_all(seed) #新增
+seed = 3407
+torch.manual_seed(seed)
+random.seed(seed)  #新增
+np.random.seed(seed)
+torch.cuda.manual_seed_all(seed) #新增
 
 #CMGFNet
 # import os
@@ -90,7 +83,7 @@ net = convnextv2_unet_modify3.__dict__["convnextv2_unet_tiny"](
             use_orig_stem=False,
             in_chans=3,
         ).cuda()
-net = load_imagenet_checkpoint(net, "/home/lvhaitao/pretrained_model/convnextv2_tiny_1k_224_fcmae.pt")
+net.load_state_dict(torch.load("/home/lvhaitao/finetune/mffnet_whu_finetune_15"))
 print("预训练权重加载完成")
 
 #MAResUNet
@@ -100,6 +93,14 @@ print("预训练权重加载完成")
 
 #ABCNet
 # net = ABCNet(8).cuda()
+
+#Ftransunet
+# config_vit = CONFIGS_ViT_seg['R50-ViT-B_16']
+# config_vit.n_classes = 6
+# config_vit.n_skip = 3
+# config_vit.patches.grid = (int(256 / 16), int(256 / 16))
+# net = ViT_seg(config_vit, img_size=256, num_classes=6).cuda()
+# net.load_from(weights=np.load(config_vit.pretrained_path))
 
 #RFNet
 # resnet = resnet18(pretrained=True, efficient=False, use_bn=True)
@@ -135,12 +136,10 @@ params = 0
 for name, param in net.named_parameters():
     params += param.nelement()
 print(params)
-if use_wandb:
-    wandb.log({"params": params})
 
-train_set = WHU_OPT_SARDataset(class_name='whu-opt-sar', root='/data/lvhaitao/dataset/whu-opt-sar/train')
+train_set = WHU_OPT_SARDataset(class_name='whu-opt-sar', root='/data/lvhaitao/dataset/whu-opt-sar/finetune')
 train_loader = torch.utils.data.DataLoader(train_set,batch_size=BATCH_SIZE, shuffle=True, num_workers=4, pin_memory=True)
-val_dataset = WHU_OPT_SARDataset(class_name='whu-opt-sar', root='/data/lvhaitao/dataset/whu-opt-sar/test')
+val_dataset = WHU_OPT_SARDataset(class_name='whu-opt-sar', root='/data/lvhaitao/dataset/whu-opt-sar/finetune')
 val_dataloader = torch.utils.data.DataLoader(dataset=val_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=4, pin_memory=True)
 
 optimizer = optim.AdamW(net.parameters(), lr=1e-4, weight_decay=0.0005)
@@ -196,27 +195,6 @@ def compute_metrics(cm, label_values=LABELS):
     return accuracy, np.nanmean(F1Score[:5]), MIoU, oa_dict
 
 def test(net, val_dataloader):
-    # with torch.no_grad():
-    #     pred = []
-    #     target = []
-    #     net.eval()
-    #     for idx, (sar, opt, label) in enumerate(tqdm(val_dataloader)):
-    #         sar = sar.cuda()  
-    #         opt = opt.cuda()
-    #         label = label.cpu().numpy()
-    #         outputs = net(opt, sar.squeeze(1))
-    #         final_class = torch.argmax(outputs, dim=1)
-    #         output = final_class.detach().cpu().numpy()
-    #         for out, gt in zip(output, label):
-    #             pred.append(out)
-    #             target.append(gt)
-    #         del output
-    #     pred = np.concatenate([p.ravel() for p in pred])
-    #     target = np.concatenate([t.ravel() for t in target])
-    #     accuracy, mf1, miou, oa_dict = metrics(pred, target,
-    #                                            label_values=['background', 'farmland', 'city', 'village', 'water','forest', 'road', 'others'])
-    #     return accuracy, mf1, miou, oa_dict
-
     with torch.no_grad():
         net.eval()
         label_values=['background', 'farmland', 'city', 'village', 'water','forest', 'road', 'others']
@@ -275,7 +253,7 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
             log_loss += loss.item()
             mean_losses[iter_] = np.mean(losses[max(0, iter_ - 100):iter_])
 
-            if iter_ % 500 == 0:
+            if iter_ % 10 == 0:
                 clear_output()
                 # rgb = np.asarray(255 * np.transpose(data.data.cpu().numpy()[0], (1, 2, 0)), dtype='uint8')
                 pred = np.argmax(output.data.cpu().numpy()[0], axis=0)
@@ -290,24 +268,19 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
         if scheduler is not None:
             scheduler.step()
             current_lr = optimizer.param_groups[0]['lr']
-        if e > 0:
+        if e > 2:
             net.eval()
             acc, mf1, miou, oa_dict = test(net, val_dataloader)
             net.train()
             if acc > acc_best:
-                # torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/testsavemodel/CMGFNet_whu_epoch{}_{}'.format(e, acc))
+                torch.save(net.state_dict(), '/home/lvhaitao/finetune/mffnet_whu_finetune_{}'.format(e))
                 acc_best = acc
-            if use_wandb:
-                wandb.log({"epoch": e, "total_accuracy": acc, "train_loss": log_loss, "mF1": mf1, "mIoU": miou, "lr": current_lr, **oa_dict})
-            log_loss = 0
+    # torch.save(net.state_dict(), '/home/lvhaitao/finetune/mffnet_whu_finetune')
     print('acc_best: ', acc_best)
 
 #####   train   ####
 time_start=time.time()
-train(net, optimizer, 50, scheduler)
+train(net, optimizer, epoch, scheduler)
 # test(net, val_dataloader)
 time_end=time.time()
 print('Total Time Cost: ',time_end-time_start)
-if use_wandb:
-    wandb.finish()
-

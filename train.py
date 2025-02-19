@@ -36,10 +36,10 @@ if use_wandb:
         "model": "MFFNet",
     }
     wandb.init(project="FTransUNet", config=config)
-    wandb.run.name = "convnextv2-tiny-Potsdam-有权重-modify3(共享stage)-spa+lla+0.4auxloss"
+    wandb.run.name = "convnextv2-tiny-Vaihingen-有权重-modify3(共享stage)-spa+lla+0.5diceloss+0.4auxloss-无Mconvnextv2"
     # wandb.run.name = "FTransUnet-Vaihingen-有权重2
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 torch.cuda.device_count.cache_clear() 
 nvmlInit()
 handle = nvmlDeviceGetHandleByIndex(int(os.environ["CUDA_VISIBLE_DEVICES"]))
@@ -108,13 +108,6 @@ net = convnextv2_unet_modify3.__dict__["convnextv2_unet_tiny"](
             use_orig_stem=False,
             in_chans=3,
         ).cuda()
-# net = convnextv2_unet_modify4.__dict__["convnextv2_unet_tiny"](
-#             num_classes=6,
-#             drop_path_rate=0.1,
-#             patch_size=16,  
-#             use_orig_stem=False,
-#             in_chans=3,
-#         ).cuda()
 net = load_imagenet_checkpoint(net, "/home/lvhaitao/pretrained_model/convnextv2_tiny_1k_224_fcmae.pt")
 print("预训练权重加载完成")
 
@@ -255,8 +248,9 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
             optimizer.zero_grad()
             output, aux_out = net(data, dsm)
             # loss = CrossEntropy2d(output, target, weight=weights)
-            # loss = CrossEntropy2d(output, target, weight=weights) + 0.5 * diceloss(output, target) + 0.4 * aux_loss(aux_out, target)
-            loss = CrossEntropy2d(output, target, weight=weights) + 0.4 * aux_loss(aux_out, target)
+            loss = CrossEntropy2d(output, target, weight=weights) + 0.5 * diceloss(output, target) + 0.4 * aux_loss(aux_out, target)
+            # loss = CrossEntropy2d(output, target, weight=weights) + 0.4 * aux_loss(aux_out, target)
+            # loss = focalloss(output, target) + 0.4 * aux_loss(aux_out, target) * 0.5 * diceloss(output, target)
             loss.backward()
             optimizer.step()
 
@@ -284,7 +278,7 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
             acc, mf1, miou, oa_dict = test(net, test_ids, all=False, stride=Stride_Size)
             net.train()
             if acc > acc_best:
-                torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixlall+seed=0)_Potsdam_epoch{}_{}'.format(e, acc))
+                torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixall+noconvnextv2)_Potsdam_epoch{}_{}'.format(e, acc))
                 acc_best = acc
             if use_wandb:
                 wandb.log({"epoch": e, "total_accuracy": acc, "train_loss": log_loss, "mF1": mf1, "mIoU": miou, "lr": current_lr, **oa_dict})

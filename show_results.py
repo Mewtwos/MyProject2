@@ -45,8 +45,8 @@ else:
     # x_dict = {"1":3828, "2":4716, "3":3406, "4":4747}
     # y_dict = {"1":4411, "2":5647, "3":2800, "4":2231}
     index_dict = {"1":"3_10", "2":"3_10", "3":"3_10", "4":"3_10"}
-    x_dict = {"1":3690, "2":4716, "3":3406, "4":4747}
-    y_dict = {"1":3733, "2":5647, "3":2800, "4":2231}
+    x_dict = {"1":3698, "2":4716, "3":3406, "4":4747}
+    y_dict = {"1":3843, "2":5647, "3":2800, "4":2231}
     dataset_dir = "/data/lvhaitao/dataset/Potsdam/"
 
 for i in range(2):
@@ -83,6 +83,7 @@ for i in range(2):
 #CMGFNet
 # net = FuseNet(num_classes=6, pretrained=False).cuda()
 # net.load_state_dict(torch.load("/home/lvhaitao/finetune/cmgfnet_vaihingen"))
+# net.load_state_dict(torch.load("/home/lvhaitao/finetune/cmgfnet_vaihingen"))
 
 # net = MAResUNet(num_classes=6).cuda()
 # net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/MAResUNet_epoch45_90.66164015953017"))
@@ -108,11 +109,11 @@ net = convnextv2_unet_modify3.__dict__["convnextv2_unet_tiny"](
             in_chans=3,
         ).cuda()
 # net.load_state_dict(torch.load("/home/lvhaitao/finetune/MFFNet(mixall)"))
-# net.load_state_dict(torch.load("/home/lvhaitao/finetune/mffnet_potsdam"))
-net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixlall+seed=20)_Potsdam_epoch32_90.47994674184432"))
+net.load_state_dict(torch.load("/home/lvhaitao/finetune/mffnet_potsdam"))
+# net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixlall+seed=20)_Potsdam_epoch32_90.47994674184432"))
 
 # net = RS3Mamba(num_classes=6).cuda()
-# net.load_state_dict(torch.load("/home/lvhaitao/vaihingenmodel/rs3mamba_epoch32_91"))
+# net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/RS3mamba_epoch45_90.393848321926"))
 
 # net = ACNet(num_class=6, pretrained=False).cuda()
 # net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/ACNet_Potsdam_epoch31_90.75246544602247"))
