@@ -23,7 +23,11 @@ try:
     from urllib.request import URLopener
 except ImportError:
     from urllib import URLopener
+from custom_repr import enable_custom_repr
+enable_custom_repr()
+
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+torch.cuda.device_count.cache_clear()
 from pynvml import *
 nvmlInit()
 handle = nvmlDeviceGetHandleByIndex(int(os.environ["CUDA_VISIBLE_DEVICES"]))
@@ -237,7 +241,7 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
 # print('Total Time Cost: ',time_end-time_start)
 
 #####   test   ####
-net.load_state_dict(torch.load('YOUR_MODEL'))
+net.load_state_dict(torch.load('/home/lvhaitao/MyProject2/savemodel/FTransUnet_Vaihingen_epoch22_92.26214985850798'))
 net.eval()
 acc, all_preds, all_gts = test(net, test_ids, all=True, stride=256)
 # print("Acc: ", acc)

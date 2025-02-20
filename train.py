@@ -30,13 +30,13 @@ from convnextv2.helpers import DiceLoss, SoftCrossEntropyLoss
 from pynvml import *
 enable_custom_repr()
 
-use_wandb = True
+use_wandb = False
 if use_wandb:
     config = {
         "model": "MFFNet",
     }
     wandb.init(project="FTransUNet", config=config)
-    wandb.run.name = "convnextv2-tiny-Vaihingen-有权重-modify3(共享stage)-spa+lla+0.5diceloss+0.4auxloss-无Mconvnextv2"
+    wandb.run.name = "convnextv2-tiny-vaihingen-有权重-modify3(共享stage)-spa+lla+0.5diceloss+0.4auxloss"
     # wandb.run.name = "FTransUnet-Vaihingen-有权重2
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
@@ -278,7 +278,7 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
             acc, mf1, miou, oa_dict = test(net, test_ids, all=False, stride=Stride_Size)
             net.train()
             if acc > acc_best:
-                torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixall+noconvnextv2)_Potsdam_epoch{}_{}'.format(e, acc))
+                # torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixall+LN)_vaihingen_epoch{}_{}'.format(e, acc))
                 acc_best = acc
             if use_wandb:
                 wandb.log({"epoch": e, "total_accuracy": acc, "train_loss": log_loss, "mF1": mf1, "mIoU": miou, "lr": current_lr, **oa_dict})

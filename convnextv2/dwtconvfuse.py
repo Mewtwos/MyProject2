@@ -12,6 +12,7 @@ class DWTconvfuse(nn.Module):
         self.finalconv = nn.Sequential(nn.Conv2d(channels // reduction, channels, kernel_size=1, bias=False))
 
     def forward(self, x, y):
+        # final = x + y
         x1 = self.convx(x)
         y1 = self.convy(y)
         dwtx = self.dwt(x1)

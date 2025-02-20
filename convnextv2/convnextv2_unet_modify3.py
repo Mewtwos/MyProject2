@@ -40,29 +40,6 @@ class CrossAttention(nn.Module):
         attn = attn.softmax(dim=-1)
         return attn @ v
 
-class DepthWiseConv(nn.Module):
-    def __init__(self,in_channel,out_channel):
-        super(DepthWiseConv, self).__init__()
- 
-        # 逐通道卷积
-        self.depth_conv = nn.Conv2d(in_channels=in_channel,
-                                    out_channels=in_channel,
-                                    kernel_size=3,
-                                    stride=1,
-                                    padding=1,
-                                    groups=in_channel)
-        #逐点卷积
-        self.point_conv = nn.Conv2d(in_channels=in_channel,
-                                    out_channels=out_channel,
-                                    kernel_size=1,
-                                    stride=1,
-                                    padding=0,
-                                    groups=1)
-    
-    def forward(self,input):
-        out = self.depth_conv(input)
-        out = self.point_conv(out)
-        return out
     
 class Block(nn.Module):
     """ConvNeXtV2 Block.
@@ -362,7 +339,7 @@ class ConvNeXtV2_unet(nn.Module):
         res4 = self.sff_stage[-4](res4x, res4y)
 
         out = self.decoder(res4, res3, res2, res1, h, w)
-        if heatmaps:
+        if self.heatmap:
             return out, heatmaps
         return out
 
@@ -382,10 +359,17 @@ class ConvNeXtV2_unet(nn.Module):
             if m.bias is not None:
                 nn.init.constant_(m.bias, 0)
 
-    def forward(self, x: Tensor, y:Tensor) -> Tensor:
+    def forward(self, x: Tensor, y:Tensor=None) -> Tensor:
+        
+        if y is None:
+            temp = x
+            x = temp[:, :3, :, :]
+            y = temp[:, 3:, :, :].squeeze(1)
+
         x = x.float()
         y = y.float()
-        y = y.unsqueeze(1).repeat(1, 3, 1, 1)
+        if len(y.shape)==3:
+            y = y.unsqueeze(1).repeat(1, 3, 1, 1)
         out = self.encoder(x, y)
         # x = self.decoder(x, enc_features)
         # x = self.head(x)

@@ -25,17 +25,17 @@ from model.vitcross_seg_modeling import CONFIGS as CONFIGS_ViT_seg
 vaihingen_data = {}
 vaihingen_dsm = {}
 patch_size = 256
-# dataset = "Vaihingen"
-dataset = "Potsdam"
+dataset = "Vaihingen"
+# dataset = "Potsdam"
 
 if dataset == "Vaihingen":
     # index_dict = {"1":30, "2":30, "3":30, "4":30}
     # x_dict = {"1":2096, "2":1530, "3":510, "4":877}
     # y_dict = {"1":1441, "2":544, "3":1601, "4":1244}
     #test
-    index_dict = {"1":15, "2":15}
-    x_dict = {"1":822, "2":277}
-    y_dict = {"1":1150, "2":1133}
+    index_dict = {"1":15, "2":15, "3":30}
+    x_dict = {"1":822, "2":277, "3":1530}
+    y_dict = {"1":1150, "2":1133, "3":544}
     dataset_dir = "/data/lvhaitao/dataset/Vaihingen/"
 else:
     # index_dict = {"1":"4_10", "2":"3_10", "3":"3_10", "4":"3_10"}
@@ -49,7 +49,7 @@ else:
     y_dict = {"1":3843, "2":5647, "3":2800, "4":2231}
     dataset_dir = "/data/lvhaitao/dataset/Potsdam/"
 
-for i in range(2):
+for i in range(len(index_dict)):
     x1 = x_dict[str(i+1)]
     y1 = y_dict[str(i+1)]
     x2 = x1 + patch_size
@@ -108,9 +108,8 @@ net = convnextv2_unet_modify3.__dict__["convnextv2_unet_tiny"](
             use_orig_stem=False,
             in_chans=3,
         ).cuda()
-# net.load_state_dict(torch.load("/home/lvhaitao/finetune/MFFNet(mixall)"))
-net.load_state_dict(torch.load("/home/lvhaitao/finetune/mffnet_potsdam"))
-# net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixlall+seed=20)_Potsdam_epoch32_90.47994674184432"))
+net.load_state_dict(torch.load("/home/lvhaitao/finetune/MFFNet(heatmap)_vaihingen_epoch20"))
+# net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixall1)_Vaihingen_epoch47_92.25891413887855"))
 
 # net = RS3Mamba(num_classes=6).cuda()
 # net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/RS3mamba_epoch45_90.393848321926"))
@@ -182,7 +181,7 @@ palette = {0 : (255, 255, 255), # Impervious surfaces (white)
         #    6 : (0, 0, 0)
            }       # Undefined (black)
 
-for i in range(2):
+for i in range(len(index_dict)):
     with torch.no_grad():
         data = torch.from_numpy(vaihingen_data[str(i+1)]).unsqueeze(0).cuda()
         dsm = torch.from_numpy(vaihingen_dsm[str(i+1)]).unsqueeze(0).cuda()

@@ -4,10 +4,13 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import cv2
-from convnextv2 import convnextv2_unet_modify2
+from convnextv2 import convnextv2_unet_modify3
 from skimage import io
 from othermodel.SAGate import DeepLab, init_weight
-
+import torch.autograd as autograd
+from pytorch_grad_cam import GradCAM
+from pytorch_grad_cam.utils.image import show_cam_on_image
+from PIL import Image
 
 palette = {0 : (255, 255, 255), # Impervious surfaces (white)
            1 : (0, 0, 255),     # Buildings (blue)
@@ -39,9 +42,9 @@ def decode_segmentation(output, palette):
         decoded_images[mask] = torch.tensor(color, dtype=torch.uint8)
     return decoded_images
 
-index = 30
-x1 = 877
-y1 = 1244
+index = 15
+x1 = 277
+y1 = 1133
 dataset_dir = "/data/lvhaitao/dataset/Vaihingen/"
 
 data = io.imread(dataset_dir+'top/top_mosaic_09cm_area{}.tif'.format(index))
@@ -55,37 +58,88 @@ y2 = y1 + 256
 data_p = data[:, x1:x2, y1:y2]
 dsm_p = dsm[x1:x2, y1:y2]
 
-net = convnextv2_unet_modify2.__dict__["convnextv2_unet_tiny"](
+net = convnextv2_unet_modify3.__dict__["convnextv2_unet_tiny"](
             num_classes=6,
             drop_path_rate=0.1,
-            head_init_scale=0.001,
             use_orig_stem=False,
             heatmap=True,
             in_chans=3,
         ).cuda()
-net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/MFFNet2_Vaihingen_epoch40_92.17164587537671"))
-# net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/MFFNet3_Potsdam_epoch29_90.97468546733342"))
-
-
+# net.load_state_dict(torch.load("/home/lvhaitao/finetune/MFFNet(mixall)_vaihingen"))
+# net.load_state_dict(torch.load("/home/lvhaitao/finetune/MFFNet(heatmap)_vaihingen_epoch20"))
+# net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixall1)_Vaihingen_epoch47_92.25891413887855"))
+# net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixall+noconvnextv2)_Potsdam_epoch46_91.86804260175617"))
+net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixall+nofef)_Potsdam_epoch32_92.09604204172777"))
 
 net.eval()
 
-with torch.no_grad():
-    data = torch.from_numpy(data_p).unsqueeze(0).cuda()
-    dsm = torch.from_numpy(dsm_p).unsqueeze(0).cuda()
-    output, heatmaps = net(data, dsm)
+data = torch.from_numpy(data_p).unsqueeze(0).cuda()
+dsm = torch.from_numpy(dsm_p).unsqueeze(0).cuda()
+input_tensor = torch.cat((data, dsm.unsqueeze(1)), dim=1)
+output, heatmaps = net(input_tensor)
+# print(output.shape)
 decoded_output = decode_segmentation(output, palette)
 decoded_output = decoded_output.squeeze().cpu().numpy().astype(np.uint8)
-heatmap1 = heatmaps[0].cpu()
-heatmap2 = heatmaps[1].cpu()
-heatmap3 = heatmaps[2].cpu()
-heatmap4 = heatmaps[3].cpu()
-heatmap_image = feature_vis(heatmap4)
+# Image.fromarray(decoded_output).save("decoded_output.png")
 
-plt.figure(figsize=(10, 10))
-plt.subplot(1, 2, 1), plt.title('label')
-plt.imshow(decoded_output), plt.axis('off')
-plt.subplot(1, 2, 2), plt.title('heatmap')
-plt.imshow(heatmap_image), plt.axis('off')
-plt.show()
+target_layers = [net.downsample_layers[-1]]
+# target_layers = [net.sff_stage[-1]]
+# target_layers = [net.decoder.b4]
 
+class SemanticSegmentationTarget:
+    def __init__(self, category, mask):
+        self.category = category
+        self.mask = torch.from_numpy(mask)
+        if torch.cuda.is_available():
+            self.mask = self.mask.cuda()
+        
+    def __call__(self, model_output):
+        return (model_output[self.category, :, : ] * self.mask).sum()
+    
+normalized_masks = torch.nn.functional.softmax(output, dim=1).cpu()
+
+sem_classes = ["roads", "buildings", "low veg.", "trees", "cars", "clutter"]
+sem_class_to_idx = {cls: idx for (idx, cls) in enumerate(sem_classes)}
+car_category = sem_class_to_idx["trees"]
+
+car_mask = normalized_masks[0, :, :, :].argmax(axis=0).detach().cpu().numpy()
+car_mask_uint8 = 255 * np.uint8(car_mask == car_category)
+car_mask_float = np.float32(car_mask == car_category)
+image = np.transpose(data_p, (1, 2, 0))
+image = (image * 255).astype(np.uint8)
+both_images = np.hstack((image, np.repeat(car_mask_uint8[:, :, None], 3, axis=-1)))
+# both = Image.fromarray(both_images)
+# both.save("both.png")
+# both.show()
+
+targets = [SemanticSegmentationTarget(car_category, car_mask_float)]
+with GradCAM(model=net,target_layers=target_layers) as cam:
+    # grayscale_cam = cam(input_tensor=input_tensor,targets=targets)
+    grayscale_cam = cam(input_tensor=input_tensor,targets=targets)[0, :]
+    rgb_img = np.float32(image) / 255
+    cam_image = show_cam_on_image(rgb_img, grayscale_cam, use_rgb=True)
+
+Image.fromarray(cam_image)    
+# cam_image = Image.fromarray(cam_image)
+# cam_image.save("cam_image.png")
+# import matplotlib.pyplot as plt
+# import numpy as np
+
+# plt.figure(figsize=(6, 6))  # 设置图像大小
+# plt.imshow(grayscale_cam, cmap='jet')  # 使用 jet 颜色映射
+# plt.colorbar()  # 添加颜色条
+# plt.axis('off')  # 隐藏坐标轴
+# plt.title("Grad-CAM Heatmap")  # 添加标题
+# plt.show()
+
+# activation = {}
+# def hook_fn(module, input, output):
+#     activation['layer4_output'] = output
+#     print(f"Layer4 output shape: {output.shape}")
+# target_layers = target_layers[0]
+# hook = target_layers.register_forward_hook(hook_fn)
+# # 进行前向传播
+# with torch.no_grad():
+#     _ = net(data, dsm)
+# # 取消 Hook
+# hook.remove()

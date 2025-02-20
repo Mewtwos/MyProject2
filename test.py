@@ -1,88 +1,108 @@
-from PIL import Image
-# from matplotlib import pyplot as plt
-import numpy as np
+import warnings
+warnings.filterwarnings('ignore')
+warnings.simplefilter('ignore')
+from torchvision.models.segmentation import deeplabv3_resnet50
 import torch
-from utils import convert_from_color
-from othermodel.ABCNet import ABCNet
-from skimage import io
-from othermodel.CMFNet import CMFNet
-from othermodel.CMGFNet import FuseNet
-from othermodel.MAResUNet import MAResUNet
-# from othermodel.Transunet import CONFIGS as CONFIGS_ViT_seg
-from othermodel.Transunet import VisionTransformer as TransUNet
-from othermodel.ukan import UKAN
-from othermodel.unetformer import UNetFormer
-# from othermodel.rs3mamba import RS3Mamba
-from convnextv2 import convnextv2_unet_modify2, convnextv2_unet_modify3
-import torch.optim as optim
+import torch.functional as F
+import numpy as np
+import requests
+import torchvision
+from PIL import Image
+from pytorch_grad_cam.utils.image import show_cam_on_image, preprocess_image
 
 
-vaihingen_data = {}
-vaihingen_dsm = {}
-vaihingen_label = {}
-patch_size = 256
-# dataset = "Vaihingen"
-dataset = "Potsdam"
+image_url = "https://farm1.staticflickr.com/6/9606553_ccc7518589_z.jpg"
+image = np.array(Image.open(requests.get(image_url, stream=True).raw))
+rgb_img = np.float32(image) / 255
+input_tensor = preprocess_image(rgb_img,
+                                mean=[0.485, 0.456, 0.406],
+                                std=[0.229, 0.224, 0.225])
+# Taken from the torchvision tutorial
+# https://pytorch.org/vision/stable/auto_examples/plot_visualization_utils.html
+model = deeplabv3_resnet50(pretrained=True, progress=False)
+model = model.eval()
 
-if dataset == "Vaihingen":
-    # index_dict = {"1":30, "2":30, "3":30, "4":30}
-    # x_dict = {"1":2096, "2":1530, "3":510, "4":877}
-    # y_dict = {"1":1441, "2":544, "3":1601, "4":1244}
-    #test
-    index_dict = {"1":15, "2":15}
-    x_dict = {"1":822, "2":277}
-    y_dict = {"1":1150, "2":1133}
-    dataset_dir = "/data/lvhaitao/dataset/Vaihingen/"
-else:
-    # index_dict = {"1":"4_10", "2":"3_10", "3":"3_10", "4":"3_10"}
-    # x_dict = {"1":3226, "2":853, "3":3406, "4":4747}
-    # y_dict = {"1":3413, "2":5138, "3":2800, "4":2231}
-    # index_dict = {"1":"3_10", "2":"3_10", "3":"3_10", "4":"3_10"}
-    # x_dict = {"1":3828, "2":4716, "3":3406, "4":4747}
-    # y_dict = {"1":4411, "2":5647, "3":2800, "4":2231}
-    index_dict = {"1":"4_10", "2":"3_10", "3":"3_10", "4":"3_10"}
-    x_dict = {"1":4934, "2":4716, "3":3406, "4":4747}
-    y_dict = {"1":4816, "2":5647, "3":2800, "4":2231}
-    dataset_dir = "/data/lvhaitao/dataset/Potsdam/"
+if torch.cuda.is_available():
+    model = model.cuda()
+    input_tensor = input_tensor.cuda()
 
-for i in range(2):
-    x1 = x_dict[str(i+1)]
-    y1 = y_dict[str(i+1)]
-    x2 = x1 + patch_size
-    y2 = y1 + patch_size
-    index = index_dict[str(i+1)]
-    if dataset == "Vaihingen":
-        data = io.imread(dataset_dir+'top/top_mosaic_09cm_area{}.tif'.format(index))
-        data = 1 / 255 * np.asarray(data.transpose((2, 0, 1)), dtype='float32')
-        dsm = np.asarray(io.imread(dataset_dir+'dsm/dsm_09cm_matching_area{}.tif'.format(index)), dtype='float32')
-    else:
-        data = io.imread(dataset_dir+'4_Ortho_RGBIR/top_potsdam_{}_RGBIR.tif'.format(index))[:, :, :3].transpose((2, 0, 1))
-        data = 1 / 255 * np.asarray(data, dtype='float32')
-        dsm = np.asarray(io.imread(dataset_dir+'1_DSM_normalisation/dsm_potsdam_{}_normalized_lastools.jpg'.format(index)), dtype='float32')
-    min = np.min(dsm)
-    max = np.max(dsm)
-    dsm = (dsm - min) / (max - min)
-    label = np.asarray(convert_from_color(io.imread('5_Labels_for_participants/top_potsdam_{}_label.tif')), dtype='int64')
+output = model(input_tensor)
+# print(type(output), output.keys())
 
-    label_p = label[x1:x2, y1:y2]
-    data_p = data[:, x1:x2, y1:y2]
-    dsm_p = dsm[x1:x2, y1:y2]
-    vaihingen_data[str(i+1)] = data_p
-    vaihingen_dsm[str(i+1)] = dsm_p
-    vaihingen_label[str(i+1)] = label_p
+class SegmentationModelOutputWrapper(torch.nn.Module):
+    def __init__(self, model): 
+        super(SegmentationModelOutputWrapper, self).__init__()
+        self.model = model
+        
+    def forward(self, x):
+        return self.model(x)["out"]
+    
+model = SegmentationModelOutputWrapper(model)
+state_dict = model.state_dict()
+output = model(input_tensor)
+print(output.shape)
+
+normalized_masks = torch.nn.functional.softmax(output, dim=1).cpu()
+sem_classes = [
+    '__background__', 'aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus',
+    'car', 'cat', 'chair', 'cow', 'diningtable', 'dog', 'horse', 'motorbike',
+    'person', 'pottedplant', 'sheep', 'sofa', 'train', 'tvmonitor'
+]
+sem_class_to_idx = {cls: idx for (idx, cls) in enumerate(sem_classes)}
+
+car_category = sem_class_to_idx["car"]
+car_mask = normalized_masks[0, :, :, :].argmax(axis=0).detach().cpu().numpy()
+car_mask_uint8 = 255 * np.uint8(car_mask == car_category)
+car_mask_float = np.float32(car_mask == car_category)
+
+both_images = np.hstack((image, np.repeat(car_mask_uint8[:, :, None], 3, axis=-1)))
+both = Image.fromarray(both_images)
+both.save("both.png")
+
+from pytorch_grad_cam import GradCAM
+
+class SemanticSegmentationTarget:
+    def __init__(self, category, mask):
+        self.category = category
+        self.mask = torch.from_numpy(mask)
+        if torch.cuda.is_available():
+            self.mask = self.mask.cuda()
+        
+    def __call__(self, model_output):
+        return (model_output[self.category, :, : ] * self.mask).sum()
+
+    
+target_layers = [model.model.backbone.layer4]
+targets = [SemanticSegmentationTarget(car_category, car_mask_float)]
+with GradCAM(model=model,target_layers=target_layers) as cam:
+    grayscale_cam = cam(input_tensor=input_tensor,targets=targets)[0, :]
+    # cam_image = show_cam_on_image(rgb_img, grayscale_cam, use_rgb=True)
+
+# Image.fromarray(cam_image)
+# Image.fromarray(grayscale_cam)
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+# 假设 grayscale_cam 是一个 [H, W] 形状的灰度图
+# plt.figure(figsize=(6, 6))  # 设置图像大小
+# plt.imshow(grayscale_cam, cmap='jet')  # 使用 jet 颜色映射
+# plt.colorbar()  # 添加颜色条
+# plt.axis('off')  # 隐藏坐标轴
+# plt.title("Grad-CAM Heatmap")  # 添加标题
+# plt.show()
 
 
-net = convnextv2_unet_modify3.__dict__["convnextv2_unet_tiny"](
-            num_classes=6,
-            drop_path_rate=0.1,
-            patch_size=16,  ###原来是16
-            use_orig_stem=False,
-            in_chans=3,
-        ).cuda()
-# net.load_state_dict(torch.load("/home/lvhaitao/finetune/MFFNet(mixall)"))
-# net.load_state_dict(torch.load("/home/lvhaitao/finetune/mffnet_potsdam"))
-net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixlall+seed=20)_Potsdam_epoch32_90.47994674184432"))
 
-
-
-
+# activation = {}
+# def hook_fn(module, input, output):
+#     activation['layer4_output'] = output
+#     print(f"Layer4 output shape: {output.shape}")
+# target_layers = model.model.backbone.layer4
+# hook = target_layers.register_forward_hook(hook_fn)
+# # 进行前向传播
+# with torch.no_grad():
+#     _ = model(input_tensor)
+# # 取消 Hook
+# hook.remove()
+    
