@@ -173,8 +173,12 @@ class FuseNet(nn.Module):
             )
         
 
-    def forward(self, x_rgb , x_dsm):
+    def forward(self, x_rgb , x_dsm=None):
         
+        if x_dsm is None:
+            temp = x_rgb
+            x_rgb = temp[:, :3, :, :]
+            x_dsm = temp[:, 3:, :, :].squeeze(1)
         # dsm_encoder
         x_dsm = x_dsm.unsqueeze(1)
         y1 = self.enc_dsm1(x_dsm)         # bs * 64 * W/2 * H/2

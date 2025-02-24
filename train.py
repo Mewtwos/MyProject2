@@ -30,7 +30,7 @@ from convnextv2.helpers import DiceLoss, SoftCrossEntropyLoss
 from pynvml import *
 enable_custom_repr()
 
-use_wandb = False
+use_wandb = True
 if use_wandb:
     config = {
         "model": "MFFNet",
@@ -39,7 +39,7 @@ if use_wandb:
     wandb.run.name = "convnextv2-tiny-vaihingen-有权重-modify3(共享stage)-spa+lla+0.5diceloss+0.4auxloss"
     # wandb.run.name = "FTransUnet-Vaihingen-有权重2
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 torch.cuda.device_count.cache_clear() 
 nvmlInit()
 handle = nvmlDeviceGetHandleByIndex(int(os.environ["CUDA_VISIBLE_DEVICES"]))

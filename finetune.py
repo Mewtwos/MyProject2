@@ -31,11 +31,11 @@ from pynvml import *
 enable_custom_repr()
 
 #微调参数：
-train_ids = ['3_10']
-test_ids = ['3_10']
+train_ids = ['15','30']
+test_ids = ['15','30']
 epoch = 1
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 torch.cuda.device_count.cache_clear() 
 
 seed = 3407
@@ -79,8 +79,8 @@ net = convnextv2_unet_modify3.__dict__["convnextv2_unet_tiny"](
             use_orig_stem=False,
             in_chans=3,
         ).cuda()
-# net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixall1)_Vaihingen_epoch47_92.25891413887855"))
-net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixlall+seed=20)_Potsdam_epoch32_90.47994674184432"))
+net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixall1)_Vaihingen_epoch47_92.25891413887855"))
+# net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixlall+seed=20)_Potsdam_epoch32_90.47994674184432"))
 
 
 #MAResUNet
@@ -241,15 +241,15 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
         if scheduler is not None:
             scheduler.step()
             current_lr = optimizer.param_groups[0]['lr']
-        torch.save(net.state_dict(), '/home/lvhaitao/finetune/mffnet_potsdam')
-        # if e > 0:
-        #     net.eval()
-        #     acc, mf1, miou, oa_dict = test(net, test_ids, all=False, stride=Stride_Size)
-        #     net.train()
-        #     if acc > acc_best:
-        #         torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixall+finetune)_Vaihingen_epoch{}_{}'.format(e, acc))
-        #         acc_best = acc
-        #     log_loss = 0
+        # torch.save(net.state_dict(), '/home/lvhaitao/finetune/mffnet_potsdam')
+        if e > 0:
+            net.eval()
+            acc, mf1, miou, oa_dict = test(net, test_ids, all=False, stride=Stride_Size)
+            net.train()
+            if acc > acc_best:
+                torch.save(net.state_dict(), '/home/lvhaitao/finetune/MFFNet(mixall+finetune_in_15_30)_Vaihingen_epoch{}'.format(e))
+                acc_best = acc
+            log_loss = 0
     print('acc_best: ', acc_best)
 
 #####   train   ####

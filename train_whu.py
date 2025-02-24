@@ -37,7 +37,7 @@ if use_wandb:
         "model": "MFFNet",
     }
     wandb.init(project="FTransUNet", config=config)
-    wandb.run.name = "convnextv2-tiny-whuDataset-有权重-modify3(共享stage)-spa+lla+0.5diceloss+0.4auxloss-随机seed2"
+    wandb.run.name = "convnextv2-tiny-whuDataset-有权重-modify3(共享stage)-spa+lla+0.5diceloss+0.4auxloss-RGBonly"
     # wandb.run.name = "SAGATE-WHU"
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
@@ -46,11 +46,11 @@ nvmlInit()
 handle = nvmlDeviceGetHandleByIndex(int(os.environ["CUDA_VISIBLE_DEVICES"]))
 print("Device :", nvmlDeviceGetName(handle))
 
-# seed = 3407
-# torch.manual_seed(seed)
-# random.seed(seed)  #新增
-# np.random.seed(seed)
-# torch.cuda.manual_seed_all(seed) #新增
+seed = 3407
+torch.manual_seed(seed)
+random.seed(seed)  #新增
+np.random.seed(seed)
+torch.cuda.manual_seed_all(seed) #新增
 
 #CMGFNet
 # import os

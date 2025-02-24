@@ -108,8 +108,11 @@ net = convnextv2_unet_modify3.__dict__["convnextv2_unet_tiny"](
             use_orig_stem=False,
             in_chans=3,
         ).cuda()
-net.load_state_dict(torch.load("/home/lvhaitao/finetune/MFFNet(heatmap)_vaihingen_epoch20"))
+# net.load_state_dict(torch.load("/home/lvhaitao/finetune/MFFNet(mixall)_vaihingen"))
+# net.load_state_dict(torch.load("/home/lvhaitao/finetune/MFFNet(mixall+finetune_in_15_30)_Vaihingen_epoch1"))
+# net.load_state_dict(torch.load("/home/lvhaitao/finetune/MFFNet(heatmap)_vaihingen_epoch20"))
 # net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixall1)_Vaihingen_epoch47_92.25891413887855"))
+net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixall+nofef)_Potsdam_epoch32_92.09604204172777"))
 
 # net = RS3Mamba(num_classes=6).cuda()
 # net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/savemodel/RS3mamba_epoch45_90.393848321926"))

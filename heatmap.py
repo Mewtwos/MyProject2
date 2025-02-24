@@ -11,6 +11,7 @@ import torch.autograd as autograd
 from pytorch_grad_cam import GradCAM
 from pytorch_grad_cam.utils.image import show_cam_on_image
 from PIL import Image
+from othermodel.CMGFNet import FuseNet
 
 palette = {0 : (255, 255, 255), # Impervious surfaces (white)
            1 : (0, 0, 255),     # Buildings (blue)
@@ -42,9 +43,16 @@ def decode_segmentation(output, palette):
         decoded_images[mask] = torch.tensor(color, dtype=torch.uint8)
     return decoded_images
 
-index = 15
-x1 = 277
-y1 = 1133
+# index = 15
+# x1 = 277
+# y1 = 1133
+
+index = 30
+# x1 = 1530
+# y1 = 544
+
+x1 = 510
+y1 = 1601
 dataset_dir = "/data/lvhaitao/dataset/Vaihingen/"
 
 data = io.imread(dataset_dir+'top/top_mosaic_09cm_area{}.tif'.format(index))
@@ -62,21 +70,27 @@ net = convnextv2_unet_modify3.__dict__["convnextv2_unet_tiny"](
             num_classes=6,
             drop_path_rate=0.1,
             use_orig_stem=False,
-            heatmap=True,
+            heatmap=False,
             in_chans=3,
         ).cuda()
+net.load_state_dict(torch.load("/home/lvhaitao/finetune/MFFNet(mixall+finetune_in_15_30)_Vaihingen_epoch1"))
 # net.load_state_dict(torch.load("/home/lvhaitao/finetune/MFFNet(mixall)_vaihingen"))
 # net.load_state_dict(torch.load("/home/lvhaitao/finetune/MFFNet(heatmap)_vaihingen_epoch20"))
 # net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixall1)_Vaihingen_epoch47_92.25891413887855"))
 # net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixall+noconvnextv2)_Potsdam_epoch46_91.86804260175617"))
-net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixall+nofef)_Potsdam_epoch32_92.09604204172777"))
+# net.load_state_dict(torch.load("/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixall+nofef)_Potsdam_epoch32_92.09604204172777"))
+
+#CMGFNet
+# net = FuseNet(num_classes=6, pretrained=False).cuda()
+# net.load_state_dict(torch.load("/home/lvhaitao/finetune/cmgfnet_vaihingen"))
+# net.load_state_dict(torch.load("/home/lvhaitao/vaihingenmodel/CMGFNet_epoch22_91"))
 
 net.eval()
 
 data = torch.from_numpy(data_p).unsqueeze(0).cuda()
 dsm = torch.from_numpy(dsm_p).unsqueeze(0).cuda()
 input_tensor = torch.cat((data, dsm.unsqueeze(1)), dim=1)
-output, heatmaps = net(input_tensor)
+output = net(input_tensor)
 # print(output.shape)
 decoded_output = decode_segmentation(output, palette)
 decoded_output = decoded_output.squeeze().cpu().numpy().astype(np.uint8)
@@ -84,7 +98,7 @@ decoded_output = decoded_output.squeeze().cpu().numpy().astype(np.uint8)
 
 target_layers = [net.downsample_layers[-1]]
 # target_layers = [net.sff_stage[-1]]
-# target_layers = [net.decoder.b4]
+# target_layers = [net.enc_rgb5]
 
 class SemanticSegmentationTarget:
     def __init__(self, category, mask):
@@ -100,7 +114,7 @@ normalized_masks = torch.nn.functional.softmax(output, dim=1).cpu()
 
 sem_classes = ["roads", "buildings", "low veg.", "trees", "cars", "clutter"]
 sem_class_to_idx = {cls: idx for (idx, cls) in enumerate(sem_classes)}
-car_category = sem_class_to_idx["trees"]
+car_category = sem_class_to_idx["buildings"]
 
 car_mask = normalized_masks[0, :, :, :].argmax(axis=0).detach().cpu().numpy()
 car_mask_uint8 = 255 * np.uint8(car_mask == car_category)

@@ -300,7 +300,7 @@ class ConvNeXtV2_unet(nn.Module):
         res4 = self.sff_stage[-4](res4x, res4y)
 
         out = self.decoder(res4, res3, res2, res1, h, w)
-        if heatmaps:
+        if self.heatmap:
             heatmaps.append(res1)
             heatmaps.append(res2)
             heatmaps.append(res3)
