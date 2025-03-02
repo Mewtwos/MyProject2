@@ -1,108 +1,23 @@
-import warnings
-warnings.filterwarnings('ignore')
-warnings.simplefilter('ignore')
-from torchvision.models.segmentation import deeplabv3_resnet50
+from ptflops import get_model_complexity_info
 import torch
-import torch.functional as F
-import numpy as np
-import requests
-import torchvision
-from PIL import Image
-from pytorch_grad_cam.utils.image import show_cam_on_image, preprocess_image
+import torchvision.models as models
 
+from convnextv2 import convnextv2_unet_modify3
 
-image_url = "https://farm1.staticflickr.com/6/9606553_ccc7518589_z.jpg"
-image = np.array(Image.open(requests.get(image_url, stream=True).raw))
-rgb_img = np.float32(image) / 255
-input_tensor = preprocess_image(rgb_img,
-                                mean=[0.485, 0.456, 0.406],
-                                std=[0.229, 0.224, 0.225])
-# Taken from the torchvision tutorial
-# https://pytorch.org/vision/stable/auto_examples/plot_visualization_utils.html
-model = deeplabv3_resnet50(pretrained=True, progress=False)
-model = model.eval()
+# 创建一个模型实例，这里以 ResNet-50 为例
+net = convnextv2_unet_modify3.__dict__["convnextv2_unet_tiny"](
+            num_classes=6,
+            drop_path_rate=0.1,
+            patch_size=16,  
+            use_orig_stem=False,
+            in_chans=3,
+        ).cuda()
 
-if torch.cuda.is_available():
-    model = model.cuda()
-    input_tensor = input_tensor.cuda()
+# 输入模型的尺寸，这个尺寸应该与模型输入的尺寸相匹配
+input_res = (4, 256, 256)
 
-output = model(input_tensor)
-# print(type(output), output.keys())
+# 使用 ptflops 计算模型的 FLOPs 和参数量
+macs, params = get_model_complexity_info(net, input_res, as_strings=True, print_per_layer_stat=True)
 
-class SegmentationModelOutputWrapper(torch.nn.Module):
-    def __init__(self, model): 
-        super(SegmentationModelOutputWrapper, self).__init__()
-        self.model = model
-        
-    def forward(self, x):
-        return self.model(x)["out"]
-    
-model = SegmentationModelOutputWrapper(model)
-state_dict = model.state_dict()
-output = model(input_tensor)
-print(output.shape)
-
-normalized_masks = torch.nn.functional.softmax(output, dim=1).cpu()
-sem_classes = [
-    '__background__', 'aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus',
-    'car', 'cat', 'chair', 'cow', 'diningtable', 'dog', 'horse', 'motorbike',
-    'person', 'pottedplant', 'sheep', 'sofa', 'train', 'tvmonitor'
-]
-sem_class_to_idx = {cls: idx for (idx, cls) in enumerate(sem_classes)}
-
-car_category = sem_class_to_idx["car"]
-car_mask = normalized_masks[0, :, :, :].argmax(axis=0).detach().cpu().numpy()
-car_mask_uint8 = 255 * np.uint8(car_mask == car_category)
-car_mask_float = np.float32(car_mask == car_category)
-
-both_images = np.hstack((image, np.repeat(car_mask_uint8[:, :, None], 3, axis=-1)))
-both = Image.fromarray(both_images)
-both.save("both.png")
-
-from pytorch_grad_cam import GradCAM
-
-class SemanticSegmentationTarget:
-    def __init__(self, category, mask):
-        self.category = category
-        self.mask = torch.from_numpy(mask)
-        if torch.cuda.is_available():
-            self.mask = self.mask.cuda()
-        
-    def __call__(self, model_output):
-        return (model_output[self.category, :, : ] * self.mask).sum()
-
-    
-target_layers = [model.model.backbone.layer4]
-targets = [SemanticSegmentationTarget(car_category, car_mask_float)]
-with GradCAM(model=model,target_layers=target_layers) as cam:
-    grayscale_cam = cam(input_tensor=input_tensor,targets=targets)[0, :]
-    # cam_image = show_cam_on_image(rgb_img, grayscale_cam, use_rgb=True)
-
-# Image.fromarray(cam_image)
-# Image.fromarray(grayscale_cam)
-
-import matplotlib.pyplot as plt
-import numpy as np
-
-# 假设 grayscale_cam 是一个 [H, W] 形状的灰度图
-# plt.figure(figsize=(6, 6))  # 设置图像大小
-# plt.imshow(grayscale_cam, cmap='jet')  # 使用 jet 颜色映射
-# plt.colorbar()  # 添加颜色条
-# plt.axis('off')  # 隐藏坐标轴
-# plt.title("Grad-CAM Heatmap")  # 添加标题
-# plt.show()
-
-
-
-# activation = {}
-# def hook_fn(module, input, output):
-#     activation['layer4_output'] = output
-#     print(f"Layer4 output shape: {output.shape}")
-# target_layers = model.model.backbone.layer4
-# hook = target_layers.register_forward_hook(hook_fn)
-# # 进行前向传播
-# with torch.no_grad():
-#     _ = model(input_tensor)
-# # 取消 Hook
-# hook.remove()
-    
+print(f"模型 FLOPs: {macs}")
+print(f"模型参数量: {params}")

@@ -23,6 +23,7 @@ from othermodel.ABCNet import ABCNet
 from convnextv2.helpers import load_custom_checkpoint, load_imagenet_checkpoint
 from othermodel.RFNet import RFNet, resnet18
 from othermodel.ESANet import ESANet
+from othermodel.SFFNet import SFFNet
 from othermodel.ACNet import ACNet
 from othermodel.SAGate import DeepLab, init_weight
 from custom_repr import enable_custom_repr
@@ -36,17 +37,16 @@ if use_wandb:
         "model": "MFFNet",
     }
     wandb.init(project="FTransUNet", config=config)
-    wandb.run.name = "convnextv2-tiny-vaihingen-有权重-modify3(共享stage)-spa+lla+0.5diceloss+0.4auxloss"
-    # wandb.run.name = "FTransUnet-Vaihingen-有权重2
+    wandb.run.name = "convnextv2-tiny-Vaihingen-有权重-modify3(共享stage)-spa+lla+0.5diceloss+0.4auxlos+FEF频域分析"
+    # wandb.run.name = "SFFNet-Potsdam-有权重"
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 torch.cuda.device_count.cache_clear() 
 nvmlInit()
 handle = nvmlDeviceGetHandleByIndex(int(os.environ["CUDA_VISIBLE_DEVICES"]))
 print("Device :", nvmlDeviceGetName(handle))
 
 seed = 3407
-# seed = 20
 torch.manual_seed(seed)
 random.seed(seed)  #新增
 np.random.seed(seed)
@@ -154,6 +154,11 @@ print("预训练权重加载完成")
 # net = DeepLab(6, pretrained_model=pretrained_model, norm_layer=nn.BatchNorm2d).cuda()
 # init_weight(net.business_layer, nn.init.kaiming_normal_,nn.BatchNorm2d, 1e-5, 0.1,mode='fan_in', nonlinearity='relu')
 
+#PACSCNet
+# net = FFNet(num_classes=6).cuda()
+
+#SFFNet
+# net = SFFNet(num_classes=6).cuda()
 
 params = 0
 for name, param in net.named_parameters():
@@ -278,7 +283,7 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
             acc, mf1, miou, oa_dict = test(net, test_ids, all=False, stride=Stride_Size)
             net.train()
             if acc > acc_best:
-                # torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/testsavemodel/MFFNet(mixall+LN)_vaihingen_epoch{}_{}'.format(e, acc))
+                # torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/testsavemodel/SFFNet_Vaihingen_epoch{}_{}'.format(e, acc))
                 acc_best = acc
             if use_wandb:
                 wandb.log({"epoch": e, "total_accuracy": acc, "train_loss": log_loss, "mF1": mf1, "mIoU": miou, "lr": current_lr, **oa_dict})

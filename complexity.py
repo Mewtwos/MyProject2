@@ -70,3 +70,7 @@ flops, params = clever_format([flops, params], '%.3f')
 
 print(f"运算量：{flops}, 参数量：{params}")
 
+params = 0
+for name, param in net.named_parameters():
+    params += param.nelement()
+print(params)

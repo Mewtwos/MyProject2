@@ -9,6 +9,7 @@ from .dwtconvfuse import DWTconvfuse
 from .dwtaf import DWTAF
 from .torch_wavelets import DWT_2D, IDWT_2D
 from .decoder import Decoder
+from .wavelet import New_DWT_2D, New_IDWT_2D, Conv_DWT_2D, Conv_IDWT_2D
 
 class SpatialAttention(nn.Module):
     def __init__(self, kernel_size=7):
@@ -88,6 +89,12 @@ class FusionBlock(nn.Module): #共享stage
         # self.blocky = Block(dim=dim, drop_path=drop_path)
         self.dwt = DWT_2D(wave='haar')
         self.idwt = IDWT_2D(wave='haar')
+        # self.dwt = New_DWT_2D('sym2', dim//4)
+        # self.idwt = New_IDWT_2D('sym2', dim//4)
+        # self.dwt = Conv_DWT_2D('coif3', dim//4)
+        # self.idwt = Conv_IDWT_2D('coif3', dim//4)
+        # self.dwt = nn.Conv2d(dim//4, dim, kernel_size=3, stride=2, padding=1)
+        # self.idwt = nn.ConvTranspose2d(dim, dim//4, kernel_size=3, stride=2, padding=1, output_padding=1)
         self.convx = nn.Conv2d(dim, dim // 4, kernel_size=1, bias=False)
         self.convy = nn.Conv2d(dim, dim // 4, kernel_size=1, bias=False)
         self.iconvx = nn.Conv2d(dim // 4, dim, kernel_size=1, bias=False)
@@ -313,17 +320,12 @@ class ConvNeXtV2_unet(nn.Module):
         
     def encoder(self, x: Tensor, y:Tensor) -> Tuple[Tensor, List[Tensor]]:
         h, w = x.shape[-2:]
-        heatmaps = []
         for i in range(self.num_stage-1):
             x = self.downsample_layers[i](x)
             y = self.downsample_layers2[i](y)
             x, y = self.stages[i]((x, y))
-            if self.heatmap:
-                heatmaps.append(x)
         x = self.downsample_layers[-1](x)
         y = self.downsample_layers2[-1](y)
-        if self.heatmap:
-            heatmaps.append(x)
 
         res1x = self.convx(x)
         res1y = self.convy(y)
@@ -339,8 +341,6 @@ class ConvNeXtV2_unet(nn.Module):
         res4 = self.sff_stage[-4](res4x, res4y)
 
         out = self.decoder(res4, res3, res2, res1, h, w)
-        if self.heatmap:
-            return out, heatmaps
         return out
 
     # def decoder(self, x: Tensor, enc_features: List[Tensor]):

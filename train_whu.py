@@ -28,6 +28,8 @@ from custom_repr import enable_custom_repr
 from convnextv2.helpers import DiceLoss, SoftCrossEntropyLoss
 from othermodel.unetformer import UNetFormer
 from othermodel.CMGFNet import FuseNet
+from othermodel.SFFNet import SFFNet
+from othermodel.MGFNet import MGFNet
 from pynvml import *
 enable_custom_repr()
 
@@ -37,10 +39,10 @@ if use_wandb:
         "model": "MFFNet",
     }
     wandb.init(project="FTransUNet", config=config)
-    wandb.run.name = "convnextv2-tiny-whuDataset-有权重-modify3(共享stage)-spa+lla+0.5diceloss+0.4auxloss-RGBonly"
-    # wandb.run.name = "SAGATE-WHU"
+    # wandb.run.name = "convnextv2-tiny-whuDataset-有权重-modify3(共享stage)-spa+lla+0.5diceloss+0.4auxloss-新增stage"
+    wandb.run.name = "MGFNet-WHU"
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 torch.cuda.device_count.cache_clear() 
 nvmlInit()
 handle = nvmlDeviceGetHandleByIndex(int(os.environ["CUDA_VISIBLE_DEVICES"]))
@@ -82,16 +84,16 @@ torch.cuda.manual_seed_all(seed) #新增
 # net = RS3Mamba(num_classes=8).cuda()
 # net = load_pretrained_ckpt(net)
 
-#convnextv2_unet_modify
-net = convnextv2_unet_modify3.__dict__["convnextv2_unet_tiny"](
-            num_classes=8,
-            drop_path_rate=0.1,
-            patch_size=16,  
-            use_orig_stem=False,
-            in_chans=3,
-        ).cuda()
-net = load_imagenet_checkpoint(net, "/home/lvhaitao/pretrained_model/convnextv2_tiny_1k_224_fcmae.pt")
-print("预训练权重加载完成")
+# convnextv2_unet_modify
+# net = convnextv2_unet_modify3.__dict__["convnextv2_unet_tiny"](
+#             num_classes=8,
+#             drop_path_rate=0.1,
+#             patch_size=16,  
+#             use_orig_stem=False,
+#             in_chans=3,
+#         ).cuda()
+# net = load_imagenet_checkpoint(net, "/home/lvhaitao/pretrained_model/convnextv2_tiny_1k_224_fcmae.pt")
+# print("预训练权重加载完成")
 
 #MAResUNet
 # net = MAResUNet(num_classes=8).cuda()
@@ -130,6 +132,12 @@ print("预训练权重加载完成")
 
 #Unetformer
 # net = UNetFormer(num_classes=8).cuda()
+
+#SFFNet
+# net = SFFNet(num_classes=8).cuda()
+
+#MGFNet
+net = MGFNet(num_classes=8,pretrained=True).cuda()
 
 params = 0
 for name, param in net.named_parameters():
@@ -264,9 +272,9 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
             optimizer.zero_grad()
             # output = net(data, sar.squeeze(1))
             # loss = CrossEntropy2d(output, target)
-            output, aux_out = net(data, sar.squeeze(1))
-            loss = CrossEntropy2d(output, target) + 0.5 * diceloss(output, target) + 0.4 * aux_loss(aux_out, target)
-            # loss = CrossEntropy2d(output, target) + 0.5 * diceloss(output, target)
+            output = net(data, sar.squeeze(1))
+            # loss = CrossEntropy2d(output, target) + 0.5 * diceloss(output, target) + 0.4 * aux_loss(aux_out, target)
+            loss = CrossEntropy2d(output, target)
             # loss = CrossEntropy2d(output, target) + 0.4 * aux_loss(aux_out, target)
             loss.backward()
             optimizer.step()
@@ -295,7 +303,7 @@ def train(net, optimizer, epochs, scheduler=None, weights=WEIGHTS, save_epoch=1)
             acc, mf1, miou, oa_dict = test(net, val_dataloader)
             net.train()
             if acc > acc_best:
-                # torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/testsavemodel/CMGFNet_whu_epoch{}_{}'.format(e, acc))
+                torch.save(net.state_dict(), '/home/lvhaitao/MyProject2/testsavemodel/MGFNet_whu_epoch{}_{}'.format(e, acc))
                 acc_best = acc
             if use_wandb:
                 wandb.log({"epoch": e, "total_accuracy": acc, "train_loss": log_loss, "mF1": mf1, "mIoU": miou, "lr": current_lr, **oa_dict})
